@@ -38,7 +38,7 @@ Terramate's bundle framework lets you express a whole cluster as a single YAML f
 and fan it out across environments automatically. The repo is organized in five layers
 that compose top-to-bottom:
 
-```
+```text
 objects/          # shared input definitions; backend + aws provider generators
 components/       # network, eks-cluster, eks-nodes, argocd-hub, argocd-spoke, bootstrap
 bundles/          # eks-cluster/ and account-bootstrap/ — assemble components into a deployable unit
@@ -52,7 +52,7 @@ The `environments:` map in that file fans the bundle out into one set of stacks 
 with per-environment input overrides.  The `stacks/` directory is the generated output of
 `make generate` and is committed so CI never needs to run generation.
 
-```
+```text
 scaffold/cluster.tm.yml    ─── eks-cluster bundle ──► stacks/aws/infra/eks/{network,cluster,nodes,provisioning}
                                                    ──► stacks/aws/dev/eks/{network,cluster,nodes,provisioning}
                                                    ──► stacks/aws/prd/eks/{network,cluster,nodes,provisioning}
@@ -68,8 +68,8 @@ exist before spokes register).
 Environments are defined in `terramate.tm.hcl`:
 
 ```hcl
-environment { id = "infra"  name = "Infrastructure Hub"  promote_from = null }
-environment { id = "dev"    name = "Development"          promote_from = null }
+environment { id = "infra"  name = "Infrastructure Hub" }
+environment { id = "dev"    name = "Development" }
 environment { id = "prd"    name = "Production"           promote_from = "dev" }
 ```
 
@@ -296,6 +296,14 @@ The `preview.yml` workflow runs two jobs:
    - `trivy config` scan (suppressions in `.trivyignore`)
 
 2. **plan** (requires `AWS_CI_ROLE_ARN`):
+   First, `tofu init` runs on changed stacks:
+   ```bash
+   terramate run \
+     --changed --git-change-base origin/main \
+     --tags eks \
+     -- tofu init
+   ```
+   Then, plan with sharing enabled:
    ```bash
    terramate run \
      --changed --git-change-base origin/main \
@@ -443,8 +451,7 @@ ride the same `promote_from` rail as everything else — test in dev, promote to
 
 ## Teardown
 
-**Always read the destroy plan before confirming.**  See the [iac-state-safety](https://github.com/ImIOImI/terramate-eks-hubspoke/blob/main/docs/design.md)
-principle: never destroy without reviewing what will be removed.
+**Always read the destroy plan before confirming.**  Never destroy without reading the plan (see [design doc](https://github.com/ImIOImI/terramate-eks-hubspoke/blob/main/docs/design.md)).
 
 Destroy in **reverse graph order** — spokes before hub, within each env from
 `provisioning` backward.  Terramate's `--reverse` flag handles this automatically:
