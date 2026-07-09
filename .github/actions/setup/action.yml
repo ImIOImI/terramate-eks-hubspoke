@@ -1,0 +1,31 @@
+name: "Setup Terramate + OpenTofu"
+description: "Install pinned Terramate GA .deb and OpenTofu via the official action."
+
+inputs:
+  terramate_version:
+    description: "Terramate GA version to install"
+    default: "0.17.1"
+  tofu_version:
+    description: "OpenTofu version to install"
+    default: "1.11.5"
+
+runs:
+  using: composite
+  steps:
+    - name: Install OpenTofu
+      uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: "${{ inputs.tofu_version }}"
+        tofu_wrapper: false
+
+    - name: Install Terramate GA
+      shell: bash
+      run: |
+        # GA releases are published to GitHub Releases (NOT the Terramate APT repo,
+        # which carries only Catalyst beta builds). Asset naming: linux_amd64.deb.
+        # URL verified 2026-07-09: HTTP 200 for v0.17.1.
+        VER="${{ inputs.terramate_version }}"
+        curl -fsSL -o /tmp/terramate.deb \
+          "https://github.com/terramate-io/terramate/releases/download/v${VER}/terramate_${VER}_linux_amd64.deb"
+        sudo dpkg -i /tmp/terramate.deb
+        terramate version

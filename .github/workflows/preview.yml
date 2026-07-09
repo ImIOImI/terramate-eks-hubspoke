@@ -1,0 +1,96 @@
+name: preview
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ─── static: always runs (linting, generation drift, format, security scan) ───
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+
+      - name: generation drift check
+        # Two-pass convergence is required: the first pass may emit .tm.hcl sharing
+        # blocks that the second pass materialises into _tmgen-sharing.tf files.
+        # git diff --exit-code fails if any generated file is stale.
+        run: |
+          terramate generate
+          terramate generate
+          git diff --exit-code
+
+      - name: tofu fmt
+        run: tofu fmt -check -recursive
+
+      - name: tflint
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+          tflint --recursive
+
+      - name: trivy config scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          exit-code: "1"
+          scan-ref: .
+          # Skip downloaded provider/module caches — we scan our own HCL only.
+          # Mirrors the local `make lint` skip pattern.
+          trivy-config: ""
+        env:
+          TRIVY_SKIP_DIRS: "**/.terraform/**"
+
+  # ─── plan: runs only when AWS OIDC role is configured (skipped on forks) ──────
+  plan:
+    needs: static
+    if: vars.AWS_CI_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: tofu init (changed EKS stacks)
+        # --tags eks excludes bootstrap + bundle-def stacks (they carry no `eks` tag).
+        # When AWS_CI_ROLE_ARN is set, full S3 backend init is possible; once state
+        # exists this also validates backend connectivity.
+        # NOTE: -backend=false was considered but does NOT work when the HCL config
+        # declares an S3 backend — tofu plan rejects the mismatch even after a
+        # -backend=false init. Since this job is gated on OIDC creds anyway, we init
+        # against the real S3 backend (the role must have s3:GetObject + s3:PutObject
+        # on the state bucket). Pre-bootstrap (bucket not yet created) runs will fail
+        # here and should be run locally per the runbook.
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base origin/main \
+            --tags eks \
+            -- tofu init
+
+      - name: tofu plan (changed EKS stacks, sharing-enabled, mock on greenfield)
+        # --enable-sharing activates outputs-sharing resolution.
+        # --mock-on-fail satisfies greenfield stacks whose producers were never applied.
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base origin/main \
+            --tags eks \
+            --enable-sharing \
+            --mock-on-fail \
+            -- tofu plan -lock=false

@@ -1,0 +1,126 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+# Prevent concurrent deploys — a merge while a deploy is running waits rather than races.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  # ─── infra layer: hub EKS cluster + network ─────────────────────────────────
+  infra:
+    if: vars.AWS_CI_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: tofu init — infra EKS stacks (changed)
+        # --tags env-infra:eks: only stacks tagged BOTH env-infra AND eks (4 stacks).
+        # Bootstrap + bundle-def stacks carry neither tag and are excluded.
+        # Bootstrap is applied locally by the operator per the runbook; CI never touches it.
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base HEAD~1 \
+            --tags env-infra:eks \
+            -- tofu init
+
+      - name: tofu apply — infra EKS stacks (changed)
+        # --enable-sharing resolves cross-stack outputs; no --mock-on-fail on apply
+        # (real upstream outputs are required at apply time).
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base HEAD~1 \
+            --tags env-infra:eks \
+            --enable-sharing \
+            -- tofu apply -auto-approve
+
+  # ─── dev layer: dev spoke EKS cluster ───────────────────────────────────────
+  dev:
+    needs: infra
+    if: vars.AWS_CI_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: tofu init — dev EKS stacks (changed)
+        # --tags env-dev:eks: only stacks tagged BOTH env-dev AND eks (4 stacks).
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base HEAD~1 \
+            --tags env-dev:eks \
+            -- tofu init
+
+      - name: tofu apply — dev EKS stacks (changed)
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base HEAD~1 \
+            --tags env-dev:eks \
+            --enable-sharing \
+            -- tofu apply -auto-approve
+
+  # ─── prd layer: prd spoke EKS cluster ───────────────────────────────────────
+  prd:
+    needs: dev
+    if: vars.AWS_CI_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: tofu init — prd EKS stacks (changed)
+        # --tags env-prd:eks: only stacks tagged BOTH env-prd AND eks (4 stacks).
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base HEAD~1 \
+            --tags env-prd:eks \
+            -- tofu init
+
+      - name: tofu apply — prd EKS stacks (changed)
+        run: |
+          terramate run \
+            --changed \
+            --git-change-base HEAD~1 \
+            --tags env-prd:eks \
+            --enable-sharing \
+            -- tofu apply -auto-approve
