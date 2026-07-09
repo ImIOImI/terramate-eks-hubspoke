@@ -137,7 +137,10 @@ generate_hcl "_tmgen-provider-kubernetes-hub.tf" {
   condition = component.input.hub_env.value != ""
 
   lets {
-    hub = component.input.account_map.value[component.input.hub_env.value]
+    # tm_try guards the disabled case: `lets` is evaluated even when
+    # condition=false (hub provisioning stack has hub_env=""), so a bare
+    # account_map[""] would error before the condition can skip the block.
+    hub = tm_try(component.input.account_map.value[component.input.hub_env.value], {})
   }
   content {
     provider "kubernetes" {

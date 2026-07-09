@@ -1,0 +1,68 @@
+# ============================================================================
+# eks-cluster BundleInstance — three clusters from one scaffold via environments.
+#
+#   infra  -> role: hub   (ArgoCD hub cluster + CI account)
+#   dev    -> role: spoke  (hub_env: infra)
+#   prd    -> role: spoke  (hub_env: infra)
+#
+# Each environment fans out to four stacks: network -> cluster -> nodes ->
+# provisioning (SPIKE A.3/B.2). Spoke provisioning also runs AFTER infra
+# provisioning (the hub ArgoCD + cluster-secret target must exist first).
+#
+# ── MINT-THEN-WIRE (SPIKE C.3) ──────────────────────────────────────────────
+# Cross-stack outputs-sharing needs each producer stack's auto-UUID as
+# from_stack_id, but bundle-generated stacks get their UUIDs only AFTER the
+# first `terramate generate`. So the *_stack_id inputs below were populated in a
+# two-step author flow:
+#   1. `make generate` once with the *_stack_id keys ABSENT (bundle
+#      placeholder-UUID defaults apply) — mints 12 stacks, each writing its own
+#      UUID into stacks/aws/<env>/eks/<child>/stack.tm.hcl.
+#   2. Read each env's network + cluster UUID (and infra's cluster UUID for the
+#      hub wiring) and write them into environments.<env>.inputs below:
+#        network_stack_id     = <env>/eks/network  stack UUID
+#        cluster_stack_id     = <env>/eks/cluster  stack UUID
+#        hub_cluster_stack_id = infra/eks/cluster  stack UUID  (spokes only)
+#   3. `make generate` again (idempotent) — the sharing input blocks now carry
+#      real from_stack_ids and generation converges.
+# To re-mint from scratch: remove the *_stack_id keys, regenerate, re-read the
+# minted UUIDs, rewire here, regenerate.
+# ============================================================================
+apiVersion: terramate.io/cli/v1
+kind: BundleInstance
+metadata:
+  name: cluster
+spec:
+  source: /bundles/eks-cluster
+  inputs:
+    node_instance_types: ["t3.large"]
+    node_scaling: { min: 2, max: 3 }
+    terraform_modules:
+      vpc: { source: "terraform-aws-modules/vpc/aws", version: "6.6.1" }
+      eks: { source: "terraform-aws-modules/eks/aws", version: "21.24.0" }
+    addon_versions:
+      kube-proxy: "v1.33.10-eksbuild.13"
+      vpc-cni: "v1.22.2-eksbuild.1"
+      coredns: "v1.12.4-eksbuild.18"
+      aws-ebs-csi-driver: "v1.48.0-eksbuild.2"
+      eks-pod-identity-agent: "v1.3.8-eksbuild.2"
+    argocd_chart_version: "10.1.2"
+environments:
+  infra:
+    inputs:
+      role: hub
+      network_stack_id: "1345fdff-3d2a-44e2-af1e-2b89829f9927"
+      cluster_stack_id: "bc7799df-a6e7-4eff-af43-4bba3bcca064"
+  dev:
+    inputs:
+      role: spoke
+      hub_env: infra
+      network_stack_id: "25cbafe4-f84c-42cf-8b9f-0f7a0537c7c7"
+      cluster_stack_id: "cfb032a8-3d93-4ead-8d5b-0d35f4fd3596"
+      hub_cluster_stack_id: "bc7799df-a6e7-4eff-af43-4bba3bcca064"
+  prd:
+    inputs:
+      role: spoke
+      hub_env: infra
+      network_stack_id: "9970ab7c-f545-422a-892b-39d2ed16f20b"
+      cluster_stack_id: "4a4924ee-b872-496e-bb0d-d0e63dea8ed2"
+      hub_cluster_stack_id: "bc7799df-a6e7-4eff-af43-4bba3bcca064"

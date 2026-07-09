@@ -13,4 +13,6 @@ validate:
 lint:
 	tofu fmt -check -recursive
 	tflint --recursive
-	trivy config --exit-code 1 .
+	# skip .terraform: downloaded upstream modules ship example k8s manifests
+	# that trip the k8s scanner; we scan our own stacks (module refs still analyzed)
+	trivy config --exit-code 1 --skip-dirs "**/.terraform/**" .

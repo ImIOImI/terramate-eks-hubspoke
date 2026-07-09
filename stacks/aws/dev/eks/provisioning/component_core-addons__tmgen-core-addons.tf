@@ -1,0 +1,43 @@
+// TERRAMATE: GENERATED AUTOMATICALLY DO NOT EDIT
+
+resource "aws_eks_addon" "coredns" {
+  addon_name    = "coredns"
+  addon_version = "v1.12.4-eksbuild.18"
+  cluster_name  = "tmhs-eks-dev"
+}
+resource "aws_iam_role" "ebs_csi" {
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "pods.eks.amazonaws.com"
+        }
+        Action = [
+          "sts:AssumeRole",
+          "sts:TagSession",
+        ]
+      },
+    ]
+  })
+  name = "tmhs-ebs-csi-dev"
+}
+resource "aws_iam_role_policy_attachment" "ebs_csi" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  role       = aws_iam_role.ebs_csi.name
+}
+resource "aws_eks_pod_identity_association" "ebs_csi" {
+  cluster_name    = "tmhs-eks-dev"
+  namespace       = "kube-system"
+  role_arn        = aws_iam_role.ebs_csi.arn
+  service_account = "ebs-csi-controller-sa"
+}
+resource "aws_eks_addon" "ebs_csi" {
+  addon_name    = "aws-ebs-csi-driver"
+  addon_version = "v1.48.0-eksbuild.2"
+  cluster_name  = "tmhs-eks-dev"
+  depends_on = [
+    aws_eks_pod_identity_association.ebs_csi,
+  ]
+}

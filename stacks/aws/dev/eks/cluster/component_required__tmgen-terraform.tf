@@ -1,0 +1,21 @@
+// TERRAMATE: GENERATED AUTOMATICALLY DO NOT EDIT
+
+terraform {
+  required_version = "1.11.5"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+  backend "s3" {
+    bucket         = "tmhs-state-dev-222222222222"
+    dynamodb_table = "tmhs-locks-dev"
+    encrypt        = true
+    key            = "stacks/by-id/cfb032a8-3d93-4ead-8d5b-0d35f4fd3596/terraform.tfstate"
+    region         = "us-east-1"
+    assume_role {
+      role_arn = "arn:aws:iam::222222222222:role/tmhs-deploy"
+    }
+  }
+}

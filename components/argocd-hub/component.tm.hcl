@@ -6,6 +6,11 @@ define "component" "metadata" {
 }
 
 define "component" {
+  input "enabled" {
+    type        = bool
+    description = "when false, emit nothing (gates every generate block). Set by the eks-cluster bundle to role==\"hub\" — conditional components are not supported, so a disabled hub component is instantiated in spoke provisioning stacks but generates no HCL."
+    default     = true
+  }
   input "cluster_name" {
     type        = string
     description = "EKS cluster name"

@@ -20,10 +20,17 @@
 # ---------------------------------------------------------------------------
 
 generate_hcl "_tmgen-argocd-spoke.tf" {
+  # Conditional components are unsupported (SPIKE-FINDINGS: no ternary source, no
+  # tm_dynamic "component"), so this component is always instantiated but emits
+  # nothing unless enabled (bundle sets enabled = role=="spoke").
+  condition = component.input.enabled.value
   lets {
     prefix = component.input.project_prefix.value
-    # hub account map entry — used to construct the controller role ARN
-    hub = component.input.account_map.value[component.input.hub_env.value]
+    # hub account map entry — used to construct the controller role ARN.
+    # tm_try guards the disabled case: `lets` is evaluated even when
+    # condition=false (hub provisioning stack instantiates this component with
+    # enabled=false and hub_env=""), so a bare account_map[""] would error.
+    hub = tm_try(component.input.account_map.value[component.input.hub_env.value], {})
   }
   content {
     # -------------------------------------------------------------------------

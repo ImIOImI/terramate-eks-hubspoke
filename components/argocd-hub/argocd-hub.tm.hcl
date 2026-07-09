@@ -6,6 +6,10 @@
 # reference resolves within a single tofu module — it is NOT a cross-stack reference.
 
 generate_hcl "_tmgen-argocd-hub.tf" {
+  # Conditional components are unsupported (SPIKE-FINDINGS: no ternary source, no
+  # tm_dynamic "component"), so this component is always instantiated but emits
+  # nothing unless enabled (bundle sets enabled = role=="hub").
+  condition = component.input.enabled.value
   lets {
     prefix = component.input.project_prefix.value
     # Compute spoke ARN list at Terramate generate time.

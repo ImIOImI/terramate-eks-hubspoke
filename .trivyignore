@@ -16,3 +16,33 @@ AVD-AWS-0089
 # No CMK exists before this bootstrap stack is applied; using AWS-managed KMS is the
 # correct first-apply posture. Migrate to a CMK after bootstrap completes.
 AVD-AWS-0132
+
+# AWS-0178: VPC Flow Logs not enabled. Finding originates in the upstream
+# terraform-aws-modules/vpc/aws module (reached via module.vpc in the eks/network
+# stacks), not in this repo's own HCL. Flow logs require a per-VPC CloudWatch log
+# group + IAM role + retention policy — meaningful cost on every one of the three
+# demo VPCs for no security value in a throwaway showcase. Enable via the module's
+# enable_flow_log inputs in a real deployment.
+AVD-AWS-0178
+
+# AWS-0038: EKS control-plane logging (controller-manager / scheduler) not enabled.
+# Finding is in the upstream terraform-aws-modules/eks/aws module (via module.eks),
+# not this repo's HCL. Control-plane logs to CloudWatch add per-cluster ingestion
+# cost with no value in a throwaway showcase; enable via the module's
+# enabled_log_types input in a real deployment.
+AVD-AWS-0038
+
+# AWS-0040 / AWS-0041: EKS public endpoint enabled / reachable from 0.0.0.0/0.
+# Intentional for this showcase: the cluster endpoint is public so exec-auth
+# (aws eks get-token) from CI / the kubernetes+helm providers can reach it without
+# a bastion or VPN. Access is still gated by IAM (EKS access entries) + the AWS
+# API, not by network alone. Restrict public_access_cidrs or go private in prod.
+AVD-AWS-0040
+AVD-AWS-0041
+
+# AWS-0104: node security-group egress allows all outbound (0.0.0.0/0).
+# Finding is in the upstream terraform-aws-modules/eks node_groups.tf (via
+# module.eks), not this repo's HCL. Unrestricted node egress is the module default
+# and is required for nodes to pull images / reach the EKS + AWS APIs; tighten with
+# a custom egress ruleset in a hardened deployment.
+AVD-AWS-0104
