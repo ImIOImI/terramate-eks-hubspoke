@@ -22,13 +22,31 @@ generate_hcl "_tmgen-sharing-inputs.tm.hcl" {
 }
 
 # ---------------------------------------------------------------------------
-# Sharing output: cluster_service_cidr (consumed by nodes component).
+# Sharing outputs: cluster_service_cidr (nodes) + cluster_name/endpoint/ca/oidc
+# (provisioning stacks for greenfield-preview-safe endpoint/CA via sharing mocks
+# instead of data.aws_eks_cluster data sources).
 # ---------------------------------------------------------------------------
 generate_hcl "_tmgen-sharing-outputs.tm.hcl" {
   content {
     output "cluster_service_cidr" {
       backend = "default"
       value   = module.eks.cluster_service_cidr
+    }
+    output "cluster_name" {
+      backend = "default"
+      value   = module.eks.cluster_name
+    }
+    output "cluster_endpoint" {
+      backend = "default"
+      value   = module.eks.cluster_endpoint
+    }
+    output "cluster_ca" {
+      backend = "default"
+      value   = module.eks.cluster_certificate_authority_data
+    }
+    output "oidc_issuer" {
+      backend = "default"
+      value   = module.eks.cluster_oidc_issuer_url
     }
   }
 }
