@@ -4,14 +4,12 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  id-token: write
-  contents: read
-
 jobs:
   # ─── static: always runs (linting, generation drift, format, security scan) ───
   static:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,8 +30,12 @@ jobs:
         run: tofu fmt -check -recursive
 
       - name: tflint
+        env:
+          TFLINT_VERSION: v0.63.1
         run: |
-          curl -fsSL https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+          curl -fsSL -o /tmp/tflint.zip "https://github.com/terraform-linters/tflint/releases/download/${TFLINT_VERSION}/tflint_linux_amd64.zip"
+          unzip -o /tmp/tflint.zip -d /usr/local/bin 2>/dev/null || sudo unzip -o /tmp/tflint.zip -d /usr/local/bin
+          tflint --version
           tflint --recursive
 
       - name: trivy config scan
@@ -53,6 +55,9 @@ jobs:
     needs: static
     if: vars.AWS_CI_ROLE_ARN != ''
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
