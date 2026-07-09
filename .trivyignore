@@ -1,0 +1,18 @@
+# AWS-0024: DynamoDB point-in-time recovery not required for a Tofu state-lock table.
+# The lock table holds only ephemeral LockID entries; PITR adds cost with no recovery value here.
+AVD-AWS-0024
+
+# AWS-0025: DynamoDB CMK not required for the state-lock table in this bootstrap demo.
+# No CMK exists pre-bootstrap; AWS managed key is the appropriate starting point.
+AVD-AWS-0025
+
+# AWS-0089: S3 access logging not enabled on the state bucket.
+# Enabling access logging requires a *separate* destination bucket, creating a circular
+# dependency at bootstrap time (the bucket is the first resource in the account).
+# Log to CloudTrail instead, which captures S3 data events without this dependency.
+AVD-AWS-0089
+
+# AWS-0132: S3 SSE uses aws:kms (AWS-managed key) rather than a customer CMK.
+# No CMK exists before this bootstrap stack is applied; using AWS-managed KMS is the
+# correct first-apply posture. Migrate to a CMK after bootstrap completes.
+AVD-AWS-0132

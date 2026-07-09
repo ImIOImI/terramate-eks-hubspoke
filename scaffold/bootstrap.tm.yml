@@ -1,0 +1,13 @@
+apiVersion: terramate.io/cli/v1
+kind: BundleInstance
+metadata:
+  name: bootstrap
+spec:
+  source: /bundles/account-bootstrap
+  inputs:
+    state_backend: local          # flip to s3 after first apply + migrate (README)
+    admin_principal_arns: []      # user adds their admin user/role ARN
+environments:
+  infra: { inputs: { env: infra, ci_entry: true } }
+  dev:   { inputs: { env: dev,   ci_entry: false } }
+  prd:   { inputs: { env: prd,   ci_entry: false } }
