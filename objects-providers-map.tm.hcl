@@ -1,1 +1,0 @@
-objects/inputs/providers-map.tm.hcl
