@@ -39,7 +39,7 @@ jobs:
           tflint --recursive
 
       - name: trivy config scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           scan-type: config
           exit-code: "1"
