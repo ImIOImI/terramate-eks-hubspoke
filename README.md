@@ -206,6 +206,8 @@ stacks/aws/dev/eks/provisioning
 stacks/aws/prd/eks/provisioning
 ```
 
+> **Note:** `terramate list --run-order` also lists the two `bundles/*` definition stacks first (they carry no `.tf` files and are excluded from CI by the `eks` tag filter).
+
 > **Why ordering lives in bundles, not stack files.** The generated `stack.tm.hcl`
 > files contain only an auto-UUID `id` — no `after`, `tags`, or `name`. Terramate
 > re-derives ordering and tag filters from the `define bundle stack` blocks at

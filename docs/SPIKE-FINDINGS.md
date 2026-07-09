@@ -508,7 +508,7 @@ metadata` has no `id` attr, and a component-emitted `stack { id = ... }` collide
 > duplicated stack blocks across configs
 ```
 
-**Working pattern (matches the production tofumate repo):** the producer keeps
+**Working pattern (matches a production Terramate repo):** the producer keeps
 its auto-UUID; the consumer's `from_stack_id` is wired **per-environment via the
 `.tm.yml`** (a bundle input that flows to `component.input.producer_id.value`).
 Because each env's producer gets a distinct UUID, the id MUST be set under
@@ -533,8 +533,9 @@ UUIDs are only known *after* the first `terramate generate` writes each
 `stacks/<env>/producer/stack.tm.hcl`. So the wiring is a **two-step author
 flow**: (1) generate to mint the producer UUIDs, (2) read them from
 `stack.tm.hcl` and write them into the consumer instance's per-env inputs, (3)
-regenerate. This is exactly how tofumate does it (`network_stack_id` read from
-the network child's `stack.tm.hcl` and set on the spoke `.tm.yml`). Bake this
+regenerate. This is exactly how a production Terramate repo does it
+(`network_stack_id` read from the network child's `stack.tm.hcl` and set on the
+spoke `.tm.yml`). Bake this
 into the eks-cluster bundle scaffolding step. (Same-bundle producer+consumer:
 the producer child's UUID still isn't knowable at generate time, so this
 mint-then-wire step is unavoidable — plan for it.)
