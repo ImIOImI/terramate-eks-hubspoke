@@ -9,16 +9,17 @@
 A monolithic, completely self-sufficient public repo demonstrating the
 module/bundle approach to standing up EKS clusters with Terramate + OpenTofu:
 an ArgoCD **hub** cluster in an `infra` account and **spoke** clusters in `dev`
-and `prd` accounts, registered to the hub. Generalized — zero SumerSports
-identifiers or org-specific integrations. Minimal but actually deployable by
+and `prd` accounts, registered to the hub. Generalized — zero
+organization-specific identifiers. Minimal but actually deployable by
 anyone with AWS accounts.
 
 ## Requirements (user-stated)
 
 1. Monolithic: one repo, self-sufficient (framework layers + instances + CI).
-2. No SumerSports-identifying information; generalized approach.
-3. As minimal as possible while viable. Explicitly dropped: Twingate, Doppler,
-   Datadog, Karpenter, legacy `aws_system_pin`, per-cluster chart pins.
+2. No organization-identifying information; generalized approach.
+3. As minimal as possible while viable. Explicitly dropped: org-specific
+   integrations (VPN, secrets manager, observability vendor), Karpenter,
+   legacy `aws_system_pin`, per-cluster chart pins.
 4. Result: an infra ArgoCD hub cluster + dev spoke (+ prd spoke added to give
    `promote_from` meaning).
 5. Actually deployable — a user can clone, fill in account IDs, and apply to
@@ -181,8 +182,8 @@ Inputs: `role` (hub|spoke), `hub_env` (spokes), `node_instance_types`,
   them, preserving launch-time CNI config), then managed node group(s) from
   the pool input, then the DaemonSet-safe pod-identity agent add-on.
 - **provisioning (both roles):** coredns + ebs-csi add-ons (the
-  Deployment-backed pair that needs schedulable nodes) — mirrors tofumate's
-  deferred-addons split (PR #1712).
+  Deployment-backed pair that needs schedulable nodes) — mirrors a
+  deferred-addons split learned from an upstream production deployment.
 - **provisioning (hub):** Helm-installed ArgoCD (argo-cd chart) + controller
   IAM role bound via Pod Identity.
 - **provisioning (spoke):** registration only —
@@ -199,7 +200,9 @@ Inputs: `role` (hub|spoke), `hub_env` (spokes), `node_instance_types`,
   the spoke's provisioning stack (dev/prd creds) writes to the hub cluster
   (infra role).
 
-## Explicit version pinning (tofumate pattern, generalized)
+## Explicit version pinning (generalized pattern)
+
+> **Note:** Versions below are illustrative from the design phase — `scaffold/cluster.tm.yml` carries the live pins.
 
 Every dependency is pinned in exactly one hand-written place; nothing floats.
 
@@ -207,8 +210,8 @@ Every dependency is pinned in exactly one hand-written place; nothing floats.
 |---|---|---|
 | OpenTofu | `config.tm.hcl` → `global.tofu_version` | `required_version` + generated `.opentofu-version` |
 | Providers (aws, kubernetes, helm) | `config.tm.hcl` → `global.terraform.providers` map | generated `required_providers` (tpe pattern) |
-| terraform-aws-modules (vpc, eks) | scaffold `terraform_modules` input | components emit `source`/`version` from the input — the analog of tofumate's `stacks/modules.tm.hcl` live pin |
-| EKS managed add-ons (all five) | scaffold `addon_versions` map input | explicit versions on every `aws_eks_addon`; `most_recent = true` is banned — the analog of `global.eks_addon_versions` / `addon-versions.tm.hcl` |
+| terraform-aws-modules (vpc, eks) | scaffold `terraform_modules` input | components emit `source`/`version` from the input |
+| EKS managed add-ons (all five) | scaffold `addon_versions` map input | explicit versions on every `aws_eks_addon`; `most_recent = true` is banned |
 | ArgoCD Helm chart | scaffold `argocd_chart_version` input | pinned `version` on the `helm_release` |
 | Terramate + tofu in CI | workflow env vars at top of each workflow | single place to bump |
 
@@ -233,9 +236,9 @@ releases, AWS creds via `aws-actions/configure-aws-credentials` OIDC →
 
 ## Out of scope (explicit)
 
-Twingate, Doppler, Datadog, Karpenter, legacy pinning, aws-system
-ApplicationSet (registration only), multi-region, ALB/ingress controllers,
-external-secrets, LocalStack support.
+Org-specific integrations (VPN, secrets manager, observability vendor),
+Karpenter, legacy pinning, aws-system ApplicationSet (registration only),
+multi-region, ALB/ingress controllers, external-secrets, LocalStack support.
 
 ## Verification plan
 
