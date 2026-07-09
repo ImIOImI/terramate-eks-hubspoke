@@ -1,5 +1,7 @@
 # terramate-eks-hubspoke
 
+[![preview](https://github.com/ImIOImI/terramate-eks-hubspoke/actions/workflows/preview.yml/badge.svg)](https://github.com/ImIOImI/terramate-eks-hubspoke/actions/workflows/preview.yml)
+
 > **Cost warning — read before you apply.**
 > This demo spins up **3 EKS control planes** (~$0.10/hr each), **3 NAT gateways**,
 > and **6 × t3.large nodes** ≈ **$600+/mo** left running.
