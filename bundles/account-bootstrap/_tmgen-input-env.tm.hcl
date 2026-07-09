@@ -2,6 +2,7 @@
 
 define "bundle" {
   input "env" {
+    default     = "dev"
     description = "Target environment"
     type        = string
     prompt {

@@ -8,6 +8,8 @@ generate_hcl "_tmgen-input-env.tm.hcl" {
       input "env" {
         type        = string
         description = "Target environment"
+        default     = "dev"
+        # unused by bundles (they read bundle.environment.id); default avoids a required-input error
         prompt {
           text    = "Environment:"
           options = ["infra", "dev", "prd"]

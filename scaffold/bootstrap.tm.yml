@@ -8,6 +8,6 @@ spec:
     state_backend: local          # flip to s3 after first apply + migrate (README)
     admin_principal_arns: []      # user adds their admin user/role ARN
 environments:
-  infra: { inputs: { env: infra, ci_entry: true } }
-  dev:   { inputs: { env: dev,   ci_entry: false } }
-  prd:   { inputs: { env: prd,   ci_entry: false } }
+  infra: { inputs: { ci_entry: true } }
+  dev:   { inputs: { ci_entry: false } }
+  prd:   { inputs: { ci_entry: false } }

@@ -11,6 +11,7 @@ define "bundle" "environments" {
 }
 
 define "bundle" {
+  # Disambiguates per-env instances in terramate output (e.g., bootstrap-infra, bootstrap-dev, bootstrap-prd)
   alias = tm_slug(bundle.environment.id)
 
   input "ci_entry" {
@@ -21,7 +22,8 @@ define "bundle" {
   input "state_backend" {
     type        = string
     description = "local (first apply) or s3 (after state migration)"
-    default     = "s3"
+    default     = "local"
+    # bootstrap starts on local state; flip to s3 in the scaffold after the first apply + migrate
   }
   input "admin_principal_arns" {
     type        = any
