@@ -353,6 +353,15 @@ the auto stack block (see C — "duplicated stack blocks across configs").
 was tested and FAILS with duplicate-stack-block; ordering-via-CI-only was not
 needed. Ordering via `define bundle stack metadata.after` is the mechanism.
 
+**Addendum (verified 2026-07-09, post-Task-11):** TAG FILTERING is re-derived
+in-memory the same way as ordering — `terramate list --tags eks`,
+`--tags env-infra:eks`, and `--tags role-spoke` all match the correct
+bundle-generated stacks even though the generated `stack.tm.hcl` files carry
+only `id`. So CI `--tags` filters (Task 12) work — but ONLY in a checkout that
+includes `bundles/`, `components/`, and `scaffold/` (always true here). Stack
+names/descriptions/tags being absent on disk is expected framework behavior,
+not an authoring bug.
+
 ---
 
 ## C. Greenfield cross-stack value passing — **WORKS via outputs-sharing + component-generated blocks + `--mock-on-fail`**
