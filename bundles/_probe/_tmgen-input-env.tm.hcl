@@ -3,12 +3,14 @@
 define "bundle" {
   input "env" {
     description = "Target environment"
-    options = [
-      "infra",
-      "dev",
-      "prd",
-    ]
-    prompt = "Environment:"
-    type   = string
+    type        = string
+    prompt {
+      options = [
+        "infra",
+        "dev",
+        "prd",
+      ]
+      text = "Environment:"
+    }
   }
 }
