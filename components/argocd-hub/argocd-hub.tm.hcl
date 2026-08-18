@@ -11,7 +11,8 @@ generate_hcl "_tmgen-argocd-hub.tf" {
   # nothing unless enabled (bundle sets enabled = role=="hub").
   condition = component.input.enabled.value
   lets {
-    prefix = component.input.project_prefix.value
+    local_env = component.input.account_map.value[component.input.env.value].endpoint != ""
+    prefix    = component.input.project_prefix.value
     # Compute spoke ARN list at Terramate generate time.
     # [for e in spoke_envs : "arn:...account_map[e].account_id..."] evaluated
     # by Terramate since all data (spoke_envs, account_map) is available as
@@ -70,20 +71,23 @@ generate_hcl "_tmgen-argocd-hub.tf" {
     # Pod-identity associations — both ArgoCD SAs in the argocd namespace.
     # depends_on helm_release.argocd so the namespace + SA exist first.
     # ---------------------------------------------------------------------------
-    resource "aws_eks_pod_identity_association" "argocd_controller" {
-      cluster_name    = component.input.cluster_name.value
-      namespace       = "argocd"
-      service_account = "argocd-application-controller"
-      role_arn        = aws_iam_role.argocd_controller.arn
-      depends_on      = [helm_release.argocd]
-    }
-
-    resource "aws_eks_pod_identity_association" "argocd_server" {
-      cluster_name    = component.input.cluster_name.value
-      namespace       = "argocd"
-      service_account = "argocd-server"
-      role_arn        = aws_iam_role.argocd_controller.arn
-      depends_on      = [helm_release.argocd]
+    # MiniStack does not implement CreatePodIdentityAssociation, and the IAM
+    # role -> ServiceAccount binding is inert against its k3s cluster, so local
+    # envs skip both associations. ArgoCD itself still installs and runs.
+    tm_dynamic "resource" {
+      for_each = let.local_env ? {} : {
+        argocd_controller = "argocd-application-controller"
+        argocd_server     = "argocd-server"
+      }
+      iterator = assoc
+      labels   = ["aws_eks_pod_identity_association", assoc.key]
+      attributes = {
+        cluster_name    = component.input.cluster_name.value
+        namespace       = "argocd"
+        service_account = assoc.value
+        role_arn        = tm_hcl_expression("aws_iam_role.argocd_controller.arn")
+        depends_on      = tm_hcl_expression("[helm_release.argocd]")
+      }
     }
   }
 }

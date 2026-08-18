@@ -7,6 +7,7 @@ generate_hcl "_tmgen-input-account-map.tm.hcl" {
     enriched = {
       for env, cfg in global.envs : env => {
         account_id      = cfg.account_id
+        endpoint        = tm_try(cfg.endpoint, "")
         region          = cfg.region
         deploy_role_arn = "arn:aws:iam::${cfg.account_id}:role/${global.project_prefix}-deploy"
         state_bucket    = "${global.project_prefix}-state-${env}-${cfg.account_id}"

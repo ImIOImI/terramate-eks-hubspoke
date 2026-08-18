@@ -73,6 +73,8 @@ jobs:
 
       - name: tofu init (changed EKS stacks)
         # --tags eks excludes bootstrap + bundle-def stacks (they carry no `eks` tag).
+        # --no-tags local excludes MiniStack-backed environments: their generated
+        # config points at http://localhost:4566, which does not exist in CI.
         # When AWS_CI_ROLE_ARN is set, full S3 backend init is possible; once state
         # exists this also validates backend connectivity.
         # NOTE: -backend=false was considered but does NOT work when the HCL config
@@ -86,6 +88,7 @@ jobs:
             --changed \
             --git-change-base origin/main \
             --tags eks \
+            --no-tags local \
             -- tofu init
 
       - name: tofu plan (changed EKS stacks, sharing-enabled, mock on greenfield)
@@ -96,6 +99,7 @@ jobs:
             --changed \
             --git-change-base origin/main \
             --tags eks \
+            --no-tags local \
             --enable-sharing \
             --mock-on-fail \
             -- tofu plan -lock=false

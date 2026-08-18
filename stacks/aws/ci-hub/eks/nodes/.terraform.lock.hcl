@@ -1,0 +1,71 @@
+# This file is maintained automatically by "tofu init".
+# Manual edits may be lost in future updates.
+
+provider "registry.opentofu.org/hashicorp/aws" {
+  version     = "6.60.0"
+  constraints = "~> 6.0, >= 6.52.0"
+  hashes = [
+    "h1:rXxKFI+Xz09xhDQ/ZbYBr/AdLe6Y556vNOV7AzXRJEE=",
+    "zh:04007b56bf3cd60edfcc27f781e403c0d62d056cad1105adc0322b5adf26913a",
+    "zh:11bb0620cd8f038f998f553c5b4250e9693251a6e59cb64265d55709dcf86037",
+    "zh:22db108fada357d17df06dc26f3ab9fa71c5190b847c4b70e155ad697afcb7bf",
+    "zh:39ec362a095882a3789a251ea368bcc7d452ea51ac1f220f1d092ea85235549e",
+    "zh:3e8e0c6d1bfa4c8530d05b6c68f3284128623ff5be80f81020fd3f4719dc70af",
+    "zh:4d4ef06153e5c569351852281d54b072a578e813e4b0874bf01613bd7bb7b467",
+    "zh:5eb1eb6923565289b4ffb519210fc7e33ec987f7b2999332c3a9ef586b3a6f28",
+    "zh:5faa31735484ee49764d65a95b1d5a92b5b386ee8a53ef13b8ed0be0dc2de553",
+    "zh:9ba05a552ccefb036af6e63bc7f60bed29442bc3202999cebe0603bf8de583bc",
+    "zh:a0c9604f236ea32555dd78862b55208beecca44339a0ef65c6915cfea5ef8cd6",
+    "zh:aff6ef217cb33cd24a1929680d1f41d8c1351d91edb7b81d231fc13c75f74946",
+    "zh:babe3a17d6eb80e07cec4c53e48abcf78e5eb611aab97d16acb805f52c72e672",
+    "zh:e453f680c3bc425b73f5438c3ee5a2b966c03945a9208166555eafa91922efbb",
+    "zh:f81f5d027675d87a4cb691401e26596541a87e30a06d60184fca8cf1438df982",
+    "zh:fa756e22f8c766b0272cf8400a21b66d5dbf4ff0542732f43b026e02a41c6e13",
+  ]
+}
+
+provider "registry.opentofu.org/hashicorp/cloudinit" {
+  version     = "2.4.0"
+  constraints = ">= 2.0.0"
+  hashes = [
+    "h1:PMRgZR+2rkcyYT4GTZ6aQN0YWGRGXX/mk+cq6m6pZac=",
+    "zh:1100d08add4583fa0c72ae61a4d90fe7e0e4c912800e8ce40736d5491cca6b94",
+    "zh:25671e5909082cdf564476a309ab958f4948a50819a6faea7f4768d77d4b2866",
+    "zh:27036ecde32c5f2fae4c965938554fc9085e4c04dc9a74f5aae6a91c06f3d738",
+    "zh:2eabfb9a357e21d906e6a4a3cba1299a4494694e90816c5d1c94253161244e4d",
+    "zh:46aff469c48be99db25a17b8aceff980d3253b5c43fe90e11df710d01ed15ef5",
+    "zh:58381b46c91f4dfea37c701896f1b7144373e9bd6fd1a2aaec561f9b69573156",
+    "zh:5e93d4b1600c3af7929eefccf092bf9a4f2a94bd2f29f5a2cebc98eede3fd88c",
+    "zh:67ad0360d17d5a2ade305bd3083caddd3c63b6d692434d249d3b71c6f7fcd0e4",
+    "zh:6e51f558aeb4271923f8822d900f2c8fe56f155f56f022366c22ec80c633e05e",
+    "zh:8be11e71a35964eecbcc36ad47a82dde0f51425567658cb21c9c6d5a9fce0494",
+    "zh:90de8354c3fffb6d0b9b663312652c98011022d0ccfac52900ce148bb263d200",
+    "zh:94c409a472d76e8a90f634dd804ff8399301bca103a7456f74d007d1fb22913f",
+    "zh:9e24975b2c085e1aee74b83799f9f0a3644ffcd9ae0c7d2840929d82153be167",
+    "zh:d24742682a35b618b4012c52a6201fda845dd706fe46e6c08a4611ea6abd6fc4",
+    "zh:ed6b04017882f68e0342b951e5c008e4852c7ed32c7d6fb81ced0437fa0a9742",
+  ]
+}
+
+provider "registry.opentofu.org/hashicorp/null" {
+  version     = "3.3.1"
+  constraints = ">= 3.0.0"
+  hashes = [
+    "h1:dd78Ad5HdfPzPts7A9qIxfitXhAriV/qza38fr2ukjk=",
+    "zh:164eb061d84e01759f391265865fb31828083d0a06b25f7af7e094cbdb18c799",
+    "zh:1bb9b669a82b52c0cba2860c71e9ee6699ef302f28cb8ed06f572d39bc6c7c4f",
+    "zh:1ea9b31a8f29302122c1e8d673693f3ac270336dae560af803cd1117265a469a",
+    "zh:238bd463cb0154fb935dc331da40c0a9cbe5db9cee615ae5f35ccad5eed7dc41",
+    "zh:30ef2b7384cf7e20f33fe75754b54cf669d59816f3ad4fc73bfb2b26fb6735e9",
+    "zh:35b5cded16e4b57c207d03ee0979b14baf486fa520e6edb7a2eecf18f1b85471",
+    "zh:3dc840d13a50cd215c7540573f27e2b61f739ba90aee5b7c3846079aa0ab5534",
+    "zh:3f9309a18db608f975d5691fcb47a6e14d77199156a52e9c39dcafe3737f2b07",
+    "zh:44263a219f7dbd1848b545d080110b4f7d0495e77b71cd3c7a0b5ec52a09accb",
+    "zh:4dec54aa5f445eeea035bbd4839bcded5e47ecd07cba0e70c5a09e9272cb592f",
+    "zh:5e8fb319d7c6d6c4566a18b9d0c91580b4901a96acd7fdc476bfc79f074368e2",
+    "zh:b0e8b6d41834b57fcfbb5ca00da52ccb757e1a95b6a2d546c0dae8bfbeca1cdf",
+    "zh:bbde4c3a1dcc1718027a61a4cdf661619d17af1b58df1038fe27bcf43c3dc29b",
+    "zh:c4140fff9f692baf29236557f706f9515f93229413438527d764023a82301da3",
+    "zh:f8e9d83184e4bbeb97c6f0d569833007c48ba5a7ff334def201df4991d03a962",
+  ]
+}

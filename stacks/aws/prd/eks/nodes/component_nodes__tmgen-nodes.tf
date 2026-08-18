@@ -21,12 +21,14 @@ module "nodes" {
   instance_types = [
     "t3.large",
   ]
-  max_size   = 3
-  min_size   = 2
-  name       = "tmhs-eks-prd-default"
-  source     = "terraform-aws-modules/eks/aws//modules/eks-managed-node-group"
-  subnet_ids = var.private_subnet_ids
-  version    = "21.24.0"
+  kubernetes_version             = "1.33"
+  max_size                       = 3
+  min_size                       = 2
+  name                           = "tmhs-eks-prd-default"
+  source                         = "terraform-aws-modules/eks/aws//modules/eks-managed-node-group"
+  subnet_ids                     = var.private_subnet_ids
+  use_latest_ami_release_version = true
+  version                        = "21.24.0"
 }
 resource "aws_eks_addon" "pod_identity" {
   addon_name    = "eks-pod-identity-agent"

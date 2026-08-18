@@ -2,3 +2,6 @@
 *.tfstate*
 *.tfplan
 .superpowers/
+
+# MiniStack local-env credentials, extracted from the k3s container
+.ministack/

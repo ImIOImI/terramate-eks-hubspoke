@@ -10,6 +10,11 @@ define "component" {
     type        = any
     description = "map of module name -> {source, version}; expects .eks.source and .eks.version"
   }
+  input "kubernetes_version" {
+    type        = string
+    description = "Kubernetes minor version for the control plane and the node group AMI"
+    default     = "1.33"
+  }
   input "cluster_name" {
     type        = string
     description = "EKS cluster name"

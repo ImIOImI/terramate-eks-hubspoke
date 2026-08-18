@@ -7,6 +7,9 @@ each step has to come where it does.
 
 ---
 
+> For a local, no-AWS run of this same sequence, see [MINISTACK.md](MINISTACK.md) —
+> the `ci-hub` environment does all of it against MiniStack in about three minutes.
+
 ## TL;DR
 
 ```bash
@@ -283,10 +286,10 @@ make generate                              # idempotent; "Nothing to do" on a cl
 make check-ids                             # fail if any stack id drifted from its derived value
 make check                                 # check-ids + generate + fail if it dirtied the tree
 terramate list --run-order                 # whole-repo order, bootstrap first
-terramate list --run-order --tags bootstrap  # the three bootstrap applies, in order
+terramate list --run-order --tags bootstrap --no-tags local  # the three real bootstrap applies, in order
 terramate list --run-order --tags env-dev  # one env end to end, bootstrap included
-terramate list --tags eks | wc -l          # 12 — proves CI still excludes bootstrap
-terramate run --tags eks --dry-run -- true # no bootstrap stack appears
+terramate list --tags eks --no-tags local | wc -l  # 12 — the real-AWS cluster stacks CI plans (excludes bootstrap + local ci-hub)
+terramate run --tags eks --no-tags local --dry-run -- true # no bootstrap or local stack appears
 grep -A4 'backend "s3"' stacks/aws/dev/eks/network/component_required__tmgen-terraform.tf
 ```
 
@@ -294,9 +297,10 @@ grep -A4 'backend "s3"' stacks/aws/dev/eks/network/component_required__tmgen-ter
 
 | Tag | Selects |
 |---|---|
-| `bootstrap` | the three account-bootstrap stacks |
+| `bootstrap` | the account-bootstrap stacks (one per env; 3 real + local `ci-hub`) |
 | `ci-entry` | just the account that owns the OIDC provider + `gha-ci` role |
-| `eks` | the 12 cluster stacks — **the CI filter; excludes bootstrap** |
+| `eks` | the cluster stacks — **CI filters `eks` + `--no-tags local` → the 12 real-AWS stacks; excludes bootstrap** |
+| `local` | MiniStack-backed stacks (the `ci-hub` env); excluded from CI |
 | `env-<id>` | everything in one environment, bootstrap included |
 | `env-<id>:eks` | one environment's four cluster stacks (CI's per-env filter) |
 | `role-hub` / `role-spoke` | cluster stacks by hub/spoke role, across environments |

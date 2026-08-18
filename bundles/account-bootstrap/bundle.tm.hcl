@@ -52,6 +52,7 @@ define bundle stack "bootstrap" {
     tags = tm_concat(
       ["bootstrap", "env-${bundle.environment.id}"],
       bundle.input.ci_entry.value ? ["ci-entry"] : [],
+      bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
     )
     # Every non-CI account's tmhs-deploy role trusts arn:...:<ci_env>:role/tmhs-gha-ci.
     # IAM rejects a trust policy naming a principal that does not exist, so the CI
