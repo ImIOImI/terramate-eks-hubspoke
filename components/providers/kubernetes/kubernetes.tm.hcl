@@ -153,8 +153,8 @@ generate_hcl "_tmgen-provider-helm.tf" {
       kubernetes = {
         host                   = var.cluster_endpoint
         cluster_ca_certificate = base64decode(var.cluster_ca)
-        client_certificate     = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.crt")
-        client_key             = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.key")
+        client_certificate     = file("${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}.crt")
+        client_key             = file("${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}.key")
       }
     }
   }
@@ -168,8 +168,8 @@ generate_hcl "_tmgen-provider-kubernetes.tf" {
     provider "kubernetes" {
       host                   = var.cluster_endpoint
       cluster_ca_certificate = base64decode(var.cluster_ca)
-      client_certificate     = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.crt")
-      client_key             = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.key")
+      client_certificate     = file("${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}.crt")
+      client_key             = file("${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}.key")
     }
   }
 }
