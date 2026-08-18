@@ -6,6 +6,16 @@ define "component" "metadata" {
 }
 
 define "component" {
+  input "kubernetes_version" {
+    type        = string
+    description = "Kubernetes minor version for the control plane and the node group AMI"
+    default     = "1.33"
+  }
+  input "use_latest_ami_release_version" {
+    type        = bool
+    description = "Look up the newest EKS-optimized AMI release from SSM. False for local envs -- MiniStack has no public SSM parameters."
+    default     = true
+  }
   input "cluster_name" {
     type        = string
     description = "EKS cluster name; passed to all add-ons and the node group module"

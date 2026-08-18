@@ -24,7 +24,7 @@ by moving the pin up — the same `promote_from` rail carries it.
 
 1. [What this is — five layers](#what-this-is--five-layers)
 2. [Repo tour](#repo-tour)
-3. [Prerequisites](#prerequisites)
+3. [Prerequisites](#prerequisites) — or skip AWS entirely with [MINISTACK.md](MINISTACK.md)
 4. [Deploy walkthrough](#deploy-walkthrough) — see also [BOOTSTRAPPING.md](BOOTSTRAPPING.md)
 5. [How a change promotes](#how-a-change-promotes)
 6. [Pinning policy](#pinning-policy)
@@ -88,6 +88,7 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 | Scaffold | repo root | `_scaffold-cluster.tm.yml`, `_scaffold-bootstrap.tm.yml` — the only hand-written instance layer |
 | Stacks | `stacks/aws/{infra,dev,prd}/` | Generated; never edit |
 | CI | `.github/workflows/` | `preview.yml` (PR), `deploy.yml` (merge to main) |
+| Local `ci` env | `MINISTACK.md` | Running the whole chain on [MiniStack](https://ministack.org) with no AWS account |
 | Bootstrapping | `BOOTSTRAPPING.md` | First-run order: why bootstrap precedes the cluster stacks, derived stack ids |
 | Make helpers | `make/` | `stack-ids.sh` (derive ids from scaffolds + bundles), `create-stacks.sh` (`make stacks`) |
 | Design | `docs/design.md` | Architecture decisions, layer diagram, pinning table |
@@ -127,6 +128,10 @@ sudo dpkg -i /tmp/terramate.deb
 > Use the **GA release from GitHub**, not the Catalyst APT repo.  The GA binary is all
 > you need for this repo; Catalyst is a separate distribution that adds cloud-dashboard
 > features and is not required here.
+
+> **No AWS account?** `make ci-apply` runs the entire chain — including a real
+> ArgoCD install — against [MiniStack](https://ministack.org) locally. See
+> [MINISTACK.md](MINISTACK.md).
 
 **AWS accounts:** you need three AWS accounts: one for `infra` (hub + CI OIDC entry),
 one for `dev`, one for `prd`.  If you only have one account, set the same account ID in

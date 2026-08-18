@@ -49,3 +49,7 @@ environments:
     inputs:
       role: spoke
       hub_env: infra
+  # Local MiniStack environment -- hub so it stands alone (no infra dependency).
+  ci:
+    inputs:
+      role: hub

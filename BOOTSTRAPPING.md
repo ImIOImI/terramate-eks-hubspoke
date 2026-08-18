@@ -7,6 +7,9 @@ each step has to come where it does.
 
 ---
 
+> For a local, no-AWS run of this same sequence, see [MINISTACK.md](MINISTACK.md) —
+> the `ci` environment does all of it against MiniStack in about three minutes.
+
 ## TL;DR
 
 ```bash

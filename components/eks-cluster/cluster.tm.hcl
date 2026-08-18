@@ -73,7 +73,7 @@ generate_hcl "_tmgen-cluster.tf" {
       version = component.input.terraform_modules.value.eks.version
 
       name               = component.input.cluster_name.value
-      kubernetes_version = "1.33"
+      kubernetes_version = component.input.kubernetes_version.value
 
       endpoint_public_access = true
 
@@ -85,6 +85,11 @@ generate_hcl "_tmgen-cluster.tf" {
       subnet_ids = var.private_subnet_ids
 
       enable_cluster_creator_admin_permissions = true
+
+      # IRSA needs data.tls_certificate over the cluster's OIDC issuer URL.
+      # MiniStack serves that issuer over http:// and the tls provider refuses
+      # any scheme but https/tls, so local envs turn IRSA off.
+      enable_irsa = let.acct.endpoint == ""
 
       access_entries = tm_merge(
         {

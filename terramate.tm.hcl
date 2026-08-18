@@ -27,3 +27,9 @@ environment {
   description  = "Production spoke account"
   promote_from = "dev"
 }
+
+environment {
+  id          = "ci"
+  name        = "Local CI"
+  description = "Local MiniStack-backed environment for testing the stack chain without AWS"
+}

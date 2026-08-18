@@ -27,6 +27,7 @@ module "eks" {
   }
   addons                                   = {}
   enable_cluster_creator_admin_permissions = true
+  enable_irsa                              = true
   endpoint_public_access                   = true
   kubernetes_version                       = "1.33"
   name                                     = "tmhs-eks-prd"

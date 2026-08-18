@@ -70,10 +70,28 @@ generate_hcl "_tmgen-k8s-hub-sharing-inputs.tm.hcl" {
   }
 }
 
+
+# ---------------------------------------------------------------------------
+# LOCAL (MiniStack) AUTH PATH
+#
+# MiniStack's EKS CreateCluster spawns a real k3s container, but there is no
+# aws-iam-authenticator webhook in front of it: `aws eks get-token` returns a
+# well-formed ExecCredential that k3s answers with 401. The only way in is k3s's
+# own admin client certificate.
+#
+# `make ci-kubeconfig` extracts that cert/key/CA out of the k3s container into
+# .ministack/<cluster>.{crt,key,ca}, and local envs point the providers at those
+# files instead of exec-auth.
+#
+# This is the one place the ci environment deliberately diverges from prod: the
+# auth path under test is NOT the exec-auth path real clusters use.
+# ---------------------------------------------------------------------------
+
 # ---------------------------------------------------------------------------
 # kubernetes provider — own cluster (always emitted).
 # ---------------------------------------------------------------------------
 generate_hcl "_tmgen-provider-kubernetes.tf" {
+  condition = component.input.account_map.value[component.input.env.value].endpoint == ""
   lets {
     acct = component.input.account_map.value[component.input.env.value]
   }
@@ -102,7 +120,7 @@ generate_hcl "_tmgen-provider-kubernetes.tf" {
 # https://github.com/hashicorp/terraform-provider-helm/blob/main/docs/index.md
 # ---------------------------------------------------------------------------
 generate_hcl "_tmgen-provider-helm.tf" {
-  condition = component.input.include_helm.value
+  condition = component.input.include_helm.value && component.input.account_map.value[component.input.env.value].endpoint == ""
 
   lets {
     acct = component.input.account_map.value[component.input.env.value]
@@ -122,6 +140,36 @@ generate_hcl "_tmgen-provider-helm.tf" {
           ]
         }
       }
+    }
+  }
+}
+
+# Local (MiniStack) variant -- client-cert auth, see LOCAL AUTH PATH note above.
+generate_hcl "_tmgen-provider-helm.tf" {
+  condition = component.input.include_helm.value && component.input.account_map.value[component.input.env.value].endpoint != ""
+
+  content {
+    provider "helm" {
+      kubernetes = {
+        host                   = var.cluster_endpoint
+        cluster_ca_certificate = base64decode(var.cluster_ca)
+        client_certificate     = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.crt")
+        client_key             = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.key")
+      }
+    }
+  }
+}
+
+# Local (MiniStack) variant -- client-cert auth, see LOCAL AUTH PATH note above.
+generate_hcl "_tmgen-provider-kubernetes.tf" {
+  condition = component.input.account_map.value[component.input.env.value].endpoint != ""
+
+  content {
+    provider "kubernetes" {
+      host                   = var.cluster_endpoint
+      cluster_ca_certificate = base64decode(var.cluster_ca)
+      client_certificate     = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.crt")
+      client_key             = file("${terramate.root.path.fs.absolute}/.ministack/${component.input.cluster_name.value}.key")
     }
   }
 }

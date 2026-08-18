@@ -28,6 +28,11 @@ define "bundle" {
     description = "environment id of the hub cluster (spokes only; empty for the hub itself)"
     default     = ""
   }
+  input "kubernetes_version" {
+    type        = string
+    description = "Kubernetes minor version for the control plane and node group AMI"
+    default     = "1.33"
+  }
   input "node_instance_types" {
     type        = any
     description = "list of EC2 instance type strings for the managed node group"
@@ -87,7 +92,10 @@ define bundle stack "network" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/network"
     name        = "eks-network-${bundle.environment.id}"
     description = "VPC + subnets for ${bundle.environment.id}"
-    tags        = ["eks", "network", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
+    tags = tm_concat(
+      ["eks", "network", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"],
+      bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
+    )
     # Anchors the whole eks chain behind this account's bootstrap: every stack here
     # keys state to the S3 bucket + lock table + tmhs-deploy role that bootstrap
     # creates, so `tofu init` fails until it exists. cluster/nodes/provisioning
@@ -136,20 +144,24 @@ define bundle stack "cluster" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/cluster"
     name        = "eks-cluster-${bundle.environment.id}"
     description = "EKS control plane for ${bundle.environment.id}"
-    tags        = ["eks", "cluster", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
-    after       = ["/stacks/aws/${bundle.environment.id}/eks/network"]
+    tags = tm_concat(
+      ["eks", "cluster", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"],
+      bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
+    )
+    after = ["/stacks/aws/${bundle.environment.id}/eks/network"]
   }
 
   component "cluster" {
     source = "/components/eks-cluster"
     inputs {
-      terraform_modules = bundle.input.terraform_modules.value
-      cluster_name      = bundle.input.aws_account_map.value[bundle.environment.id].cluster_name
-      env               = bundle.environment.id
-      role              = bundle.input.role.value
-      account_map       = bundle.input.aws_account_map.value
-      project_prefix    = bundle.input.project_prefix.value
-      network_stack_id  = "${bundle.environment.id}-eks-network"
+      terraform_modules  = bundle.input.terraform_modules.value
+      cluster_name       = bundle.input.aws_account_map.value[bundle.environment.id].cluster_name
+      env                = bundle.environment.id
+      role               = bundle.input.role.value
+      kubernetes_version = bundle.input.kubernetes_version.value
+      account_map        = bundle.input.aws_account_map.value
+      project_prefix     = bundle.input.project_prefix.value
+      network_stack_id   = "${bundle.environment.id}-eks-network"
     }
   }
 
@@ -185,20 +197,25 @@ define bundle stack "nodes" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/nodes"
     name        = "eks-nodes-${bundle.environment.id}"
     description = "Managed node group for ${bundle.environment.id}"
-    tags        = ["eks", "nodes", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
-    after       = ["/stacks/aws/${bundle.environment.id}/eks/cluster"]
+    tags = tm_concat(
+      ["eks", "nodes", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"],
+      bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
+    )
+    after = ["/stacks/aws/${bundle.environment.id}/eks/cluster"]
   }
 
   component "nodes" {
     source = "/components/eks-nodes"
     inputs {
-      cluster_name        = bundle.input.aws_account_map.value[bundle.environment.id].cluster_name
-      addon_versions      = bundle.input.addon_versions.value
-      node_instance_types = bundle.input.node_instance_types.value
-      node_scaling        = bundle.input.node_scaling.value
-      terraform_modules   = bundle.input.terraform_modules.value
-      network_stack_id    = "${bundle.environment.id}-eks-network"
-      cluster_stack_id    = "${bundle.environment.id}-eks-cluster"
+      cluster_name                   = bundle.input.aws_account_map.value[bundle.environment.id].cluster_name
+      kubernetes_version             = bundle.input.kubernetes_version.value
+      use_latest_ami_release_version = bundle.input.aws_account_map.value[bundle.environment.id].endpoint == ""
+      addon_versions                 = bundle.input.addon_versions.value
+      node_instance_types            = bundle.input.node_instance_types.value
+      node_scaling                   = bundle.input.node_scaling.value
+      terraform_modules              = bundle.input.terraform_modules.value
+      network_stack_id               = "${bundle.environment.id}-eks-network"
+      cluster_stack_id               = "${bundle.environment.id}-eks-cluster"
     }
   }
 
@@ -235,7 +252,10 @@ define bundle stack "provisioning" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/provisioning"
     name        = "eks-provisioning-${bundle.environment.id}"
     description = "Core add-ons + ArgoCD (${bundle.input.role.value}) for ${bundle.environment.id}"
-    tags        = ["eks", "provisioning", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
+    tags = tm_concat(
+      ["eks", "provisioning", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"],
+      bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
+    )
     after = tm_concat(
       ["/stacks/aws/${bundle.environment.id}/eks/nodes"],
       bundle.input.role.value == "spoke" ? ["/stacks/aws/${bundle.input.hub_env.value}/eks/provisioning"] : [],

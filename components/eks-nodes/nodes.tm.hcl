@@ -61,6 +61,17 @@ generate_hcl "_tmgen-nodes.tf" {
       name         = "${component.input.cluster_name.value}-default"
       cluster_name = component.input.cluster_name.value
 
+      # Pinning this also zeroes out the submodule's data.aws_eks_cluster_versions
+      # lookup (count = var.kubernetes_version == null ? 1 : 0), which otherwise
+      # floats the node AMI to the latest STANDARD_SUPPORT version -- and which
+      # MiniStack does not implement (No route for GET /cluster-versions).
+      kubernetes_version = component.input.kubernetes_version.value
+
+      # The AMI release lookup reads /aws/service/eks/optimized-ami/... from
+      # SSM's public parameter store, which MiniStack does not carry. Local envs
+      # turn it off; real envs keep the upstream default.
+      use_latest_ami_release_version = component.input.use_latest_ami_release_version.value
+
       # subnet_ids comes from the network stack via outputs-sharing (var.*).
       subnet_ids = var.private_subnet_ids
 
