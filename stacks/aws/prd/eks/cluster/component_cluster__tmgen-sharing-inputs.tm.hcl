@@ -2,13 +2,13 @@
 
 input "vpc_id" {
   backend       = "default"
-  from_stack_id = "9970ab7c-f545-422a-892b-39d2ed16f20b"
+  from_stack_id = "prd-eks-network"
   mock          = "vpc-00000000000000000"
   value         = outputs.vpc_id.value
 }
 input "private_subnet_ids" {
   backend       = "default"
-  from_stack_id = "9970ab7c-f545-422a-892b-39d2ed16f20b"
+  from_stack_id = "prd-eks-network"
   mock = [
     "subnet-00000000000000000",
     "subnet-00000000000000001",

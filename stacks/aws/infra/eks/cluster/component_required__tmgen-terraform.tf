@@ -12,7 +12,7 @@ terraform {
     bucket         = "tmhs-state-infra-111111111111"
     dynamodb_table = "tmhs-locks-infra"
     encrypt        = true
-    key            = "stacks/by-id/bc7799df-a6e7-4eff-af43-4bba3bcca064/terraform.tfstate"
+    key            = "stacks/by-id/infra-eks-cluster/terraform.tfstate"
     region         = "us-east-1"
     assume_role {
       role_arn = "arn:aws:iam::111111111111:role/tmhs-deploy"

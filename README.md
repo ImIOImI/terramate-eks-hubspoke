@@ -88,8 +88,8 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 | Scaffold | repo root | `_scaffold-cluster.tm.yml`, `_scaffold-bootstrap.tm.yml` — the only hand-written instance layer |
 | Stacks | `stacks/aws/{infra,dev,prd}/` | Generated; never edit |
 | CI | `.github/workflows/` | `preview.yml` (PR), `deploy.yml` (merge to main) |
-| Bootstrapping | `BOOTSTRAPPING.md` | First-run order: why bootstrap precedes the cluster stacks, mint-then-wire |
-| Scripts | `scripts/` | `wire-stack-ids.sh` — the `make wire` mint-then-wire helper |
+| Bootstrapping | `BOOTSTRAPPING.md` | First-run order: why bootstrap precedes the cluster stacks, derived stack ids |
+| Make helpers | `make/` | `stack-ids.sh` (derive ids from scaffolds + bundles), `create-stacks.sh` (`make stacks`) |
 | Design | `docs/design.md` | Architecture decisions, layer diagram, pinning table |
 | Spike findings | `docs/SPIKE-FINDINGS.md` | Verified Terramate mechanics (environment fan-out, outputs-sharing, run ordering) |
 
@@ -176,6 +176,7 @@ spec:
 ### Step 2 — Generate stacks
 
 ```bash
+make stacks      # seed each stack.tm.hcl with its derived id; no-op on a plain clone
 make generate
 ```
 
@@ -436,30 +437,33 @@ or any other scaffold input.
 
 ---
 
-## UUID wiring (mint-then-wire)
+## Stack ids
 
-Cross-stack output sharing requires each producer stack's auto-UUID as `from_stack_id`.
-Terramate generates these UUIDs at `make generate` time and writes them into each
-stack's `stack.tm.hcl`.  The `_scaffold-cluster.tm.yml` already has the UUIDs wired for
-the stacks in this repo.
+Stack ids are derived from stack paths, not minted as UUIDs:
 
-If you delete `stacks/`, or change the `metadata.path` of any stack in the bundle
-(i.e. rename a stack), you must re-wire the UUIDs:
+| Stack path | Id | State key |
+|---|---|---|
+| `/stacks/aws/dev/eks/network` | `dev-eks-network` | `stacks/by-id/dev-eks-network/terraform.tfstate` |
+| `/stacks/aws/infra/bootstrap` | `infra-bootstrap` | `stacks/by-id/infra-bootstrap/terraform.tfstate` |
 
-1. Remove the `*_stack_id` keys from `_scaffold-cluster.tm.yml` `environments.<env>.inputs`.
-2. Run `make generate` — new stacks are minted, each with a fresh UUID.
-3. Run `make wire` — `scripts/wire-stack-ids.sh` reads the minted UUIDs out of the
-   generated `stack.tm.hcl` files and writes them back into
-   `_scaffold-cluster.tm.yml`. It is idempotent, so re-running it is safe.
-4. Run `make generate` again — sharing blocks resolve and generation converges.
+Terramate only mints a UUID when `stack.tm.hcl` is absent, so `make stacks` seeds
+that file first. `make/stack-ids.sh` derives the full stack list by reading the
+`environments:` keys from each root `_scaffold-*.tm.yml` and the `metadata.path`
+templates from its bundle — nothing is hardcoded.
 
-To do it by hand instead of `make wire`, read each UUID with
-`grep id stacks/aws/<env>/eks/<stack>/stack.tm.hcl` and set `network_stack_id`,
-`cluster_stack_id`, and (spokes only) `hub_cluster_stack_id` per environment.
+Because the ids are reproducible, the bundle recomputes them inline for
+cross-stack sharing, so there are no `*_stack_id` inputs to hand-wire:
 
-> The S3 state key is derived from the stack UUID, so re-minting points every stack
-> at a fresh, empty state key. See
-> [BOOTSTRAPPING.md](BOOTSTRAPPING.md#mint-then-wire-only-if-you-regenerate-stacks-from-scratch).
+```hcl
+network_stack_id     = "${bundle.environment.id}-eks-network"
+hub_cluster_stack_id = "${bundle.input.hub_env.value}-eks-cluster"
+```
+
+**Adding an environment** is a key in each scaffold plus `make stacks && make generate`.
+
+`make check-ids` (run by `make check` in CI) fails if any `stack.tm.hcl` id has
+drifted from its derived value. See
+[BOOTSTRAPPING.md](BOOTSTRAPPING.md#stack-ids-are-derived-not-minted).
 
 ---
 
