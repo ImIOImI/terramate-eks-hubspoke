@@ -5,9 +5,8 @@ stacks:          ## seed each stack.tm.hcl with its derived id (run before first
 check-ids:       ## fail if any stack.tm.hcl id has drifted from its derived value
 	./make/create-stacks.sh --check
 
-generate: ## two passes: object-layer _tmgen inputs, then bundle stacks
-	terramate generate
-	terramate generate
+generate: ## self-bootstrapping two-pass codegen (seeds the account map for new/renamed envs)
+	./make/generate.sh
 
 check: check-ids generate
 	git diff --exit-code --stat -- . ':!docs'
