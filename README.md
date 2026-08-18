@@ -25,7 +25,7 @@ by moving the pin up — the same `promote_from` rail carries it.
 1. [What this is — five layers](#what-this-is--five-layers)
 2. [Repo tour](#repo-tour)
 3. [Prerequisites](#prerequisites)
-4. [Deploy walkthrough](#deploy-walkthrough)
+4. [Deploy walkthrough](#deploy-walkthrough) — see also [BOOTSTRAPPING.md](BOOTSTRAPPING.md)
 5. [How a change promotes](#how-a-change-promotes)
 6. [Pinning policy](#pinning-policy)
 7. [Teardown](#teardown)
@@ -41,25 +41,26 @@ and fan it out across environments automatically. The repo is organized in five 
 that compose top-to-bottom:
 
 ```text
-objects/          # shared input definitions; backend + aws provider generators
-components/       # network, eks-cluster, eks-nodes, argocd-hub, argocd-spoke, bootstrap
-bundles/          # eks-cluster/ and account-bootstrap/ — assemble components into a deployable unit
-scaffold/         # BundleInstance YAML files (ONE per bundle, fanning out via environments)
-stacks/           # generated only — never hand-edited
+objects/                     # shared input definitions; backend + aws provider generators
+components/                  # network, eks-cluster, eks-nodes, argocd-hub, argocd-spoke, bootstrap
+bundles/                     # eks-cluster/ and account-bootstrap/ — assemble components into a deployable unit
+_scaffold-bootstrap.tm.yml   # BundleInstance: one per bundle, at the repo root, fanning out via environments
+_scaffold-cluster.tm.yml     #
+stacks/                      # generated only — never hand-edited
 ```
 
-**The model:** each `scaffold/*.tm.yml` is a `BundleInstance` — the single hand-written
+**The model:** each `_scaffold-*.tm.yml` at the repo root is a `BundleInstance` — the single hand-written
 instance declaration that tells Terramate which bundle to instantiate and what inputs to pass.
 The `environments:` map in that file fans the bundle out into one set of stacks per environment,
 with per-environment input overrides.  The `stacks/` directory is the generated output of
 `make generate` and is committed so CI never needs to run generation.
 
 ```text
-scaffold/cluster.tm.yml    ─── eks-cluster bundle ──► stacks/aws/infra/eks/{network,cluster,nodes,provisioning}
+_scaffold-cluster.tm.yml    ─── eks-cluster bundle ──► stacks/aws/infra/eks/{network,cluster,nodes,provisioning}
                                                    ──► stacks/aws/dev/eks/{network,cluster,nodes,provisioning}
                                                    ──► stacks/aws/prd/eks/{network,cluster,nodes,provisioning}
 
-scaffold/bootstrap.tm.yml  ─── account-bootstrap ──► stacks/aws/{infra,dev,prd}/bootstrap
+_scaffold-bootstrap.tm.yml  ─── account-bootstrap ──► stacks/aws/{infra,dev,prd}/bootstrap
 ```
 
 Within each cluster, stacks run in dependency order automatically:
@@ -84,9 +85,11 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 | Objects | `objects/` | Shared input schemas; generates backend HCL + AWS provider blocks |
 | Components | `components/` | `network`, `eks-cluster`, `eks-nodes`, `eks-core-addons`, `argocd-hub`, `argocd-spoke`, `bootstrap`, `providers` |
 | Bundles | `bundles/` | `eks-cluster/` (role=hub or spoke), `account-bootstrap/` |
-| Scaffold | `scaffold/` | `cluster.tm.yml`, `bootstrap.tm.yml` — the only hand-written instance layer |
+| Scaffold | repo root | `_scaffold-cluster.tm.yml`, `_scaffold-bootstrap.tm.yml` — the only hand-written instance layer |
 | Stacks | `stacks/aws/{infra,dev,prd}/` | Generated; never edit |
 | CI | `.github/workflows/` | `preview.yml` (PR), `deploy.yml` (merge to main) |
+| Bootstrapping | `BOOTSTRAPPING.md` | First-run order: why bootstrap precedes the cluster stacks, derived stack ids |
+| Make helpers | `make/` | `stack-ids.sh` (derive ids from scaffolds + bundles), `create-stacks.sh` (`make stacks`) |
 | Design | `docs/design.md` | Architecture decisions, layer diagram, pinning table |
 | Spike findings | `docs/SPIKE-FINDINGS.md` | Verified Terramate mechanics (environment fan-out, outputs-sharing, run ordering) |
 
@@ -134,6 +137,11 @@ are per-stack UUID and do not collide.
 
 ## Deploy walkthrough
 
+> **Order matters and Terramate does not enforce it.** The bootstrap stacks must be
+> applied before any cluster stack can even `tofu init`, and `infra` must be
+> bootstrapped before `dev`/`prd`. [BOOTSTRAPPING.md](BOOTSTRAPPING.md) explains why,
+> with the generated code that proves it. The steps below are the short version.
+
 ### Step 0 — Fork and clone
 
 ```bash
@@ -153,7 +161,7 @@ envs = {
 }
 ```
 
-Edit `scaffold/bootstrap.tm.yml` — add the ARN(s) of the IAM user or role you will use
+Edit `_scaffold-bootstrap.tm.yml` — add the ARN(s) of the IAM user or role you will use
 for the initial local apply (your admin credentials):
 
 ```yaml
@@ -168,6 +176,7 @@ spec:
 ### Step 2 — Generate stacks
 
 ```bash
+make stacks      # seed each stack.tm.hcl with its derived id; no-op on a plain clone
 make generate
 ```
 
@@ -189,22 +198,26 @@ Run order (all stacks):
 
 ```bash
 $ terramate list --run-order
-stacks/aws/dev/bootstrap
-stacks/aws/dev/eks/network
 stacks/aws/infra/bootstrap
+stacks/aws/dev/bootstrap
 stacks/aws/infra/eks/network
 stacks/aws/prd/bootstrap
+stacks/aws/dev/eks/network
+stacks/aws/infra/eks/cluster
 stacks/aws/prd/eks/network
 stacks/aws/dev/eks/cluster
-stacks/aws/infra/eks/cluster
+stacks/aws/infra/eks/nodes
 stacks/aws/prd/eks/cluster
 stacks/aws/dev/eks/nodes
-stacks/aws/infra/eks/nodes
-stacks/aws/prd/eks/nodes
 stacks/aws/infra/eks/provisioning
+stacks/aws/prd/eks/nodes
 stacks/aws/dev/eks/provisioning
 stacks/aws/prd/eks/provisioning
 ```
+
+The bootstrap stacks lead because each environment's `network` stack is `after`
+its own bootstrap, and the spoke bootstraps are `after` the CI account's. See
+[BOOTSTRAPPING.md](BOOTSTRAPPING.md) for why.
 
 > **Note:** `terramate list --run-order` also lists the two `bundles/*` definition stacks first (they carry no `.tf` files and are excluded from CI by the `eks` tag filter).
 
@@ -212,7 +225,7 @@ stacks/aws/prd/eks/provisioning
 > files contain only an auto-UUID `id` — no `after`, `tags`, or `name`. Terramate
 > re-derives ordering and tag filters from the `define bundle stack` blocks at
 > graph-computation time.  This means `--run-order` and `--tags` filters require
-> `bundles/`, `components/`, and `scaffold/` to be present in the checkout — which is
+> `bundles/`, `components/`, and the root `_scaffold-*.tm.yml` files to be present in the checkout — which is
 > always true in this monorepo.
 
 ### Step 3 — Bootstrap each account (local apply with admin creds)
@@ -221,8 +234,20 @@ Bootstrap stacks create the S3 state bucket, DynamoDB lock table, deploy role, a
 (infra only) the GitHub OIDC provider and `gha-ci` entry role.  They are applied
 locally with admin credentials and are excluded from CI.
 
-For each account, switch to credentials for that account (env vars, `aws configure`,
-or `--profile`), then:
+**Apply `infra` first** — the `dev` and `prd` deploy roles trust the `gha-ci` role
+that only the infra bootstrap creates, and IAM rejects a trust policy naming a
+principal that does not exist. The graph knows this order:
+
+```bash
+$ terramate list --run-order --tags bootstrap
+stacks/aws/infra/bootstrap
+stacks/aws/dev/bootstrap
+stacks/aws/prd/bootstrap
+```
+
+Each stack runs on ambient admin credentials for **its own** account, so apply them
+one at a time rather than in a single `terramate run`. Switch credentials (env vars,
+`aws configure`, or `--profile`), then:
 
 ```bash
 cd stacks/aws/infra/bootstrap
@@ -239,7 +264,7 @@ respective account credentials.
 After all three bootstrap stacks are applied, the S3 buckets exist and you can migrate
 the bootstrap state into them.
 
-Edit `scaffold/bootstrap.tm.yml`, flip `state_backend`:
+Edit `_scaffold-bootstrap.tm.yml`, flip `state_backend`:
 
 ```yaml
 spec:
@@ -385,7 +410,7 @@ first, then promoted to `prd` (or all envs at once via `spec.inputs`).
 
 **Example — bump CoreDNS in dev only:**
 
-1. In `scaffold/cluster.tm.yml`, add an override under `environments.dev.inputs`:
+1. In `_scaffold-cluster.tm.yml`, add an override under `environments.dev.inputs`:
 
    ```yaml
    environments:
@@ -412,26 +437,33 @@ or any other scaffold input.
 
 ---
 
-## UUID wiring (mint-then-wire)
+## Stack ids
 
-Cross-stack output sharing requires each producer stack's auto-UUID as `from_stack_id`.
-Terramate generates these UUIDs at `make generate` time and writes them into each
-stack's `stack.tm.hcl`.  The `scaffold/cluster.tm.yml` already has the UUIDs wired for
-the stacks in this repo.
+Stack ids are derived from stack paths, not minted as UUIDs:
 
-If you change the `metadata.path` of any stack in the bundle (i.e. rename a stack),
-you must re-wire the UUIDs:
+| Stack path | Id | State key |
+|---|---|---|
+| `/stacks/aws/dev/eks/network` | `dev-eks-network` | `stacks/by-id/dev-eks-network/terraform.tfstate` |
+| `/stacks/aws/infra/bootstrap` | `infra-bootstrap` | `stacks/by-id/infra-bootstrap/terraform.tfstate` |
 
-1. Remove the `*_stack_id` keys from `scaffold/cluster.tm.yml` `environments.<env>.inputs`.
-2. Run `make generate` — new stacks are minted, each with a fresh UUID.
-3. Read the UUIDs from the generated `stack.tm.hcl` files:
-   ```bash
-   # example for infra network stack
-   grep id stacks/aws/infra/eks/network/stack.tm.hcl
-   ```
-4. Write those UUIDs back into `scaffold/cluster.tm.yml` under the appropriate
-   `environments.<env>.inputs.*_stack_id` keys.
-5. Run `make generate` again — sharing blocks resolve and generation converges.
+Terramate only mints a UUID when `stack.tm.hcl` is absent, so `make stacks` seeds
+that file first. `make/stack-ids.sh` derives the full stack list by reading the
+`environments:` keys from each root `_scaffold-*.tm.yml` and the `metadata.path`
+templates from its bundle — nothing is hardcoded.
+
+Because the ids are reproducible, the bundle recomputes them inline for
+cross-stack sharing, so there are no `*_stack_id` inputs to hand-wire:
+
+```hcl
+network_stack_id     = "${bundle.environment.id}-eks-network"
+hub_cluster_stack_id = "${bundle.input.hub_env.value}-eks-cluster"
+```
+
+**Adding an environment** is a key in each scaffold plus `make stacks && make generate`.
+
+`make check-ids` (run by `make check` in CI) fails if any `stack.tm.hcl` id has
+drifted from its derived value. See
+[BOOTSTRAPPING.md](BOOTSTRAPPING.md#stack-ids-are-derived-not-minted).
 
 ---
 
@@ -443,12 +475,12 @@ Every dependency is pinned in exactly one hand-written place; nothing floats.
 |---|---|---|
 | OpenTofu | `config.tm.hcl` → `global.tofu_version` | `required_version` + generated `.opentofu-version` (tenv reads it) |
 | Providers (`aws`, `kubernetes`, `helm`, `tls`) | `config.tm.hcl` → `global.terraform.providers` | generated `required_providers` in every stack |
-| terraform-aws-modules (`vpc`, `eks`) | `scaffold/cluster.tm.yml` `spec.inputs.terraform_modules` | components emit `source`/`version` from the input |
-| EKS managed add-ons (all five) | `scaffold/cluster.tm.yml` `spec.inputs.addon_versions` | explicit version on every `aws_eks_addon`; `most_recent = true` is banned |
-| ArgoCD Helm chart | `scaffold/cluster.tm.yml` `spec.inputs.argocd_chart_version` | pinned `version` on the `helm_release` |
+| terraform-aws-modules (`vpc`, `eks`) | `_scaffold-cluster.tm.yml` `spec.inputs.terraform_modules` | components emit `source`/`version` from the input |
+| EKS managed add-ons (all five) | `_scaffold-cluster.tm.yml` `spec.inputs.addon_versions` | explicit version on every `aws_eks_addon`; `most_recent = true` is banned |
+| ArgoCD Helm chart | `_scaffold-cluster.tm.yml` `spec.inputs.argocd_chart_version` | pinned `version` on the `helm_release` |
 | Terramate + OpenTofu in CI | workflow env vars at top of each workflow file | single place to bump |
 
-Per-environment overrides in `scaffold/cluster.tm.yml` (e.g. a dev-only addon bump)
+Per-environment overrides in `_scaffold-cluster.tm.yml` (e.g. a dev-only addon bump)
 ride the same `promote_from` rail as everything else — test in dev, promote to prd.
 
 ---
@@ -477,7 +509,7 @@ terramate run --reverse --tags env-infra:eks --enable-sharing -- tofu destroy
 **Bootstrap teardown** — bootstrap stacks are not tagged `eks` so the above commands
 exclude them.  If you want to remove the bootstrap infrastructure too:
 
-1. Flip `state_backend` back to `local` in `scaffold/bootstrap.tm.yml` and run
+1. Flip `state_backend` back to `local` in `_scaffold-bootstrap.tm.yml` and run
    `make generate`.
 2. In each bootstrap stack dir, run `tofu init -migrate-state` to pull state back local.
 3. Run `tofu destroy` in each bootstrap dir with that account's admin creds
@@ -504,14 +536,15 @@ This repo is a working demo, not a production blueprint.  Before going to produc
 ## Caveats
 
 - **Add-on versions** (`aws-ebs-csi-driver`, `eks-pod-identity-agent`) in
-  `scaffold/cluster.tm.yml` are plausible for Kubernetes 1.33 but have not been
+  `_scaffold-cluster.tm.yml` are plausible for Kubernetes 1.33 but have not been
   validated against a live EKS cluster.  Run
   `aws eks describe-addon-versions --kubernetes-version 1.33 --addon-name <name>`
   and adjust the versions before your first apply.
 
 - **Tags and ordering require the full checkout.** The generated `stack.tm.hcl` files
   contain only a stack UUID — no tags, no `after` edges, no name. Terramate re-derives
-  these from `bundles/`, `components/`, and `scaffold/` at graph-computation time.
+  these from `bundles/`, `components/`, and the root `_scaffold-*.tm.yml` files at
+  graph-computation time.
   Filtering with `--tags env-infra:eks` or running `--run-order` requires the full
   source tree (always true in this repo; relevant if you ever copy just the `stacks/`
   directory somewhere).

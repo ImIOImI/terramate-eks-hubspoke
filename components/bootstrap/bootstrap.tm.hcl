@@ -2,8 +2,8 @@ generate_hcl "_tmgen-bootstrap.tf" {
   lets {
     acct   = component.input.account_map.value[component.input.env.value]
     prefix = component.input.project_prefix.value
-    # Construct gha-ci ARN from the infra account (cross-account deploy trust)
-    gha_ci_arn = "arn:aws:iam::${component.input.account_map.value["infra"].account_id}:role/${component.input.project_prefix.value}-gha-ci"
+    # Construct gha-ci ARN from the CI account (cross-account deploy trust)
+    gha_ci_arn = "arn:aws:iam::${component.input.account_map.value[component.input.ci_env.value].account_id}:role/${component.input.project_prefix.value}-gha-ci"
     # Merge gha-ci ARN with any extra admin principals
     trust_principals = tm_concat(
       [let.gha_ci_arn],

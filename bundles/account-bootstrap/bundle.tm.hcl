@@ -19,6 +19,11 @@ define "bundle" {
     description = "Create the GitHub OIDC provider + gha-ci entry role in this account"
     default     = false
   }
+  input "ci_env" {
+    type        = string
+    description = "environment id of the account that holds the GitHub OIDC provider + gha-ci entry role; every other account's deploy role trusts it, so that account bootstraps first"
+    default     = "infra"
+  }
   input "state_backend" {
     type        = string
     description = "local (first apply) or s3 (after state migration)"
@@ -32,7 +37,7 @@ define "bundle" {
   }
 
   scaffolding {
-    path = "/scaffold/bootstrap.tm.yml"
+    path = "/_scaffold-bootstrap.tm.yml"
     name = "bootstrap"
   }
 }
@@ -43,17 +48,26 @@ define bundle stack "bootstrap" {
     path        = "/stacks/aws/${bundle.environment.id}/bootstrap"
     name        = "bootstrap-${bundle.environment.id}"
     description = "Account foundation for ${bundle.environment.id}"
-    tags        = ["bootstrap", "env-${bundle.environment.id}"]
+    # 'ci-entry' marks the one account that owns the OIDC provider + gha-ci role.
+    tags = tm_concat(
+      ["bootstrap", "env-${bundle.environment.id}"],
+      bundle.input.ci_entry.value ? ["ci-entry"] : [],
+    )
+    # Every non-CI account's tmhs-deploy role trusts arn:...:<ci_env>:role/tmhs-gha-ci.
+    # IAM rejects a trust policy naming a principal that does not exist, so the CI
+    # account's bootstrap must be applied first.
+    after = bundle.input.ci_entry.value ? [] : ["/stacks/aws/${bundle.input.ci_env.value}/bootstrap"]
   }
 
   component "bootstrap" {
     source = "/components/bootstrap"
     inputs {
-      project_prefix       = bundle.input.project_prefix.value
+      project_prefix = bundle.input.project_prefix.value
       # SPIKE A.3/A.4: use bundle.environment.id directly — no env bundle input needed
       env                  = bundle.environment.id
       account_map          = bundle.input.aws_account_map.value
       github_repo          = bundle.input.github_repo.value
+      ci_env               = bundle.input.ci_env.value
       ci_entry             = bundle.input.ci_entry.value
       admin_principal_arns = bundle.input.admin_principal_arns.value
     }

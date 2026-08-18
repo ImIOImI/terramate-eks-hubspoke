@@ -61,30 +61,20 @@ define "bundle" {
     default     = "10.0.0.0/16"
   }
 
-  # ── mint-then-wire stack-id inputs (SPIKE C.3) ──────────────────────────────
-  # Bundle-generated stacks get auto-UUIDs; cross-stack from_stack_id cannot be
-  # deterministic. These are wired per-environment in scaffold/cluster.tm.yml
-  # AFTER the first `make generate` mints the UUIDs (see that file's header).
-  # Empty defaults let the first mint pass succeed; the placeholder-UUID default
-  # (below) keeps the sharing input blocks syntactically valid on that pass.
-  input "network_stack_id" {
-    type        = string
-    description = "this env's network stack UUID (wired per-env in the scaffold after mint)"
-    default     = "00000000-0000-4000-8000-000000000000"
-  }
-  input "cluster_stack_id" {
-    type        = string
-    description = "this env's eks-cluster stack UUID (wired per-env in the scaffold after mint)"
-    default     = "00000000-0000-4000-8000-000000000000"
-  }
-  input "hub_cluster_stack_id" {
-    type        = string
-    description = "the hub eks-cluster stack UUID (spokes only; wired per-env in the scaffold after mint)"
-    default     = "00000000-0000-4000-8000-000000000000"
-  }
+  # ── derived stack ids ────────────────────────────────────────────────────────
+  # Cross-stack outputs-sharing needs each producer stack's id as from_stack_id.
+  # Those ids are NOT minted UUIDs here: make/create-stacks.sh seeds every
+  # stack.tm.hcl with an id derived from the stack path (see make/stack-ids.sh),
+  # and Terramate only mints a UUID when that file is absent. So the same formula
+  # reproduces them below and no wiring input is needed.
+  #
+  #   /stacks/aws/<env>/eks/<label>  ->  <env>-eks-<label>
+  #
+  # Keep these two expressions and make/stack-ids.sh's id_for() in agreement --
+  # `make check-ids` fails the build if they ever drift.
 
   scaffolding {
-    path = "/scaffold/cluster.tm.yml"
+    path = "/_scaffold-cluster.tm.yml"
     name = "cluster"
   }
 }
@@ -97,7 +87,12 @@ define bundle stack "network" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/network"
     name        = "eks-network-${bundle.environment.id}"
     description = "VPC + subnets for ${bundle.environment.id}"
-    tags        = ["eks", "network", "env-${bundle.environment.id}"]
+    tags        = ["eks", "network", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
+    # Anchors the whole eks chain behind this account's bootstrap: every stack here
+    # keys state to the S3 bucket + lock table + tmhs-deploy role that bootstrap
+    # creates, so `tofu init` fails until it exists. cluster/nodes/provisioning
+    # inherit the edge transitively through network.
+    after = ["/stacks/aws/${bundle.environment.id}/bootstrap"]
   }
 
   component "network" {
@@ -141,7 +136,7 @@ define bundle stack "cluster" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/cluster"
     name        = "eks-cluster-${bundle.environment.id}"
     description = "EKS control plane for ${bundle.environment.id}"
-    tags        = ["eks", "cluster", "env-${bundle.environment.id}"]
+    tags        = ["eks", "cluster", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
     after       = ["/stacks/aws/${bundle.environment.id}/eks/network"]
   }
 
@@ -154,7 +149,7 @@ define bundle stack "cluster" {
       role              = bundle.input.role.value
       account_map       = bundle.input.aws_account_map.value
       project_prefix    = bundle.input.project_prefix.value
-      network_stack_id  = bundle.input.network_stack_id.value
+      network_stack_id  = "${bundle.environment.id}-eks-network"
     }
   }
 
@@ -190,7 +185,7 @@ define bundle stack "nodes" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/nodes"
     name        = "eks-nodes-${bundle.environment.id}"
     description = "Managed node group for ${bundle.environment.id}"
-    tags        = ["eks", "nodes", "env-${bundle.environment.id}"]
+    tags        = ["eks", "nodes", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
     after       = ["/stacks/aws/${bundle.environment.id}/eks/cluster"]
   }
 
@@ -202,8 +197,8 @@ define bundle stack "nodes" {
       node_instance_types = bundle.input.node_instance_types.value
       node_scaling        = bundle.input.node_scaling.value
       terraform_modules   = bundle.input.terraform_modules.value
-      network_stack_id    = bundle.input.network_stack_id.value
-      cluster_stack_id    = bundle.input.cluster_stack_id.value
+      network_stack_id    = "${bundle.environment.id}-eks-network"
+      cluster_stack_id    = "${bundle.environment.id}-eks-cluster"
     }
   }
 
@@ -283,7 +278,7 @@ define bundle stack "provisioning" {
       hub_env          = bundle.input.hub_env.value
       account_map      = bundle.input.aws_account_map.value
       project_prefix   = bundle.input.project_prefix.value
-      cluster_stack_id = bundle.input.cluster_stack_id.value
+      cluster_stack_id = "${bundle.environment.id}-eks-cluster"
     }
   }
 
@@ -294,11 +289,11 @@ define bundle stack "provisioning" {
       cluster_name         = bundle.input.aws_account_map.value[bundle.environment.id].cluster_name
       env                  = bundle.environment.id
       account_map          = bundle.input.aws_account_map.value
-      cluster_stack_id     = bundle.input.cluster_stack_id.value
+      cluster_stack_id     = "${bundle.environment.id}-eks-cluster"
       include_helm         = bundle.input.role.value == "hub"
       hub_env              = bundle.input.role.value == "spoke" ? bundle.input.hub_env.value : ""
       hub_cluster_name     = bundle.input.role.value == "spoke" ? bundle.input.aws_account_map.value[bundle.input.hub_env.value].cluster_name : ""
-      hub_cluster_stack_id = bundle.input.role.value == "spoke" ? bundle.input.hub_cluster_stack_id.value : ""
+      hub_cluster_stack_id = bundle.input.role.value == "spoke" ? "${bundle.input.hub_env.value}-eks-cluster" : ""
     }
   }
 

@@ -1,0 +1,51 @@
+# ============================================================================
+# eks-cluster BundleInstance — three clusters from one scaffold via environments.
+#
+#   infra  -> role: hub   (ArgoCD hub cluster + CI account)
+#   dev    -> role: spoke  (hub_env: infra)
+#   prd    -> role: spoke  (hub_env: infra)
+#
+# Each environment fans out to four stacks: network -> cluster -> nodes ->
+# provisioning (SPIKE A.3/B.2). Spoke provisioning also runs AFTER infra
+# provisioning (the hub ArgoCD + cluster-secret target must exist first).
+#
+# ── STACK IDS ───────────────────────────────────────────────────────────────
+# There is no *_stack_id wiring here any more. Stack ids are derived from stack
+# paths by make/stack-ids.sh and seeded into each stack.tm.hcl by
+# `make stacks`, so the bundle reproduces them with the same formula
+# (<env>-eks-<label>) instead of taking them as inputs.
+#
+# Adding an environment is now just adding a key below, then `make stacks &&
+# make generate`. See BOOTSTRAPPING.md.
+# ============================================================================
+apiVersion: terramate.io/cli/v1
+kind: BundleInstance
+metadata:
+  name: cluster
+spec:
+  source: /bundles/eks-cluster
+  inputs:
+    node_instance_types: ["t3.large"]
+    node_scaling: { min: 2, max: 3 }
+    terraform_modules:
+      vpc: { source: "terraform-aws-modules/vpc/aws", version: "6.6.1" }
+      eks: { source: "terraform-aws-modules/eks/aws", version: "21.24.0" }
+    addon_versions:
+      kube-proxy: "v1.33.10-eksbuild.13"
+      vpc-cni: "v1.22.2-eksbuild.1"
+      coredns: "v1.12.4-eksbuild.18"
+      aws-ebs-csi-driver: "v1.48.0-eksbuild.2"
+      eks-pod-identity-agent: "v1.3.8-eksbuild.2"
+    argocd_chart_version: "10.1.2"
+environments:
+  infra:
+    inputs:
+      role: hub
+  dev:
+    inputs:
+      role: spoke
+      hub_env: infra
+  prd:
+    inputs:
+      role: spoke
+      hub_env: infra

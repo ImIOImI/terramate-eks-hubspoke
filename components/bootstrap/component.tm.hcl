@@ -22,6 +22,11 @@ define "component" {
     type        = string
     description = "GitHub repo slug (owner/repo) for OIDC trust condition"
   }
+  input "ci_env" {
+    type        = string
+    description = "environment id of the account holding the gha-ci entry role that every deploy role trusts"
+    default     = "infra"
+  }
   input "ci_entry" {
     type        = bool
     description = "Create the GitHub OIDC provider + gha-ci entry role in this account"

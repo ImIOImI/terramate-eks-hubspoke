@@ -1,9 +1,15 @@
-.PHONY: generate check validate lint
-generate:        ## two passes: object-layer _tmgen inputs, then bundle stacks
+.PHONY: generate stacks check-ids check validate lint
+stacks:          ## seed each stack.tm.hcl with its derived id (run before first generate)
+	./make/create-stacks.sh
+
+check-ids:       ## fail if any stack.tm.hcl id has drifted from its derived value
+	./make/create-stacks.sh --check
+
+generate: ## two passes: object-layer _tmgen inputs, then bundle stacks
 	terramate generate
 	terramate generate
 
-check: generate
+check: check-ids generate
 	git diff --exit-code --stat -- . ':!docs'
 
 validate:
