@@ -1,12 +1,14 @@
-# The `ci` environment (MiniStack)
+# The `ci-hub` environment (MiniStack)
 
-`ci` is a fourth environment that runs the entire stack chain — bootstrap →
+`ci-hub` is a fourth environment that runs the entire stack chain — bootstrap →
 network → cluster → nodes → provisioning — against
-[MiniStack](https://ministack.org) on your laptop. No AWS account, no cost.
+[MiniStack](https://ministack.org) on your laptop. No AWS account, no cost. It
+plays the hub role (ArgoCD); a future `ci-spoke` would register against it inside
+the same MiniStack fabric.
 
 ```bash
-make ci-apply     # ~3 minutes from cold
-make ci-down      # remove everything
+make ci-hub-apply # ~3 minutes from cold
+make ci-down      # remove the whole local fabric
 ```
 
 It is a real end-to-end run, not a plan: MiniStack's `eks:CreateCluster` starts a
@@ -17,10 +19,10 @@ Helm. All seven ArgoCD pods come up `Running`.
 
 ## How an environment becomes local
 
-`config.tm.hcl` gives `ci` an `endpoint`:
+`config.tm.hcl` gives `ci-hub` an `endpoint`:
 
 ```hcl
-ci = {
+"ci-hub" = {
   account_id = "000000000099"
   region     = "us-east-1"
   endpoint   = "http://localhost:4566"
@@ -29,7 +31,8 @@ ci = {
 
 That single field is the switch. `objects/inputs/account-map.tm.hcl` surfaces it
 (`""` for real environments), and each component checks it. Nothing keys off the
-string `"ci"`, so a second local environment is just another `endpoint`.
+string `"ci-hub"`, so a second local environment (e.g. `ci-spoke`) is just
+another `endpoint` entry.
 
 MiniStack turns a **12-digit access key into the account id**, which is why
 `account_id` and the access key are the same value.
@@ -52,8 +55,8 @@ Five deliberate divergences. Each is a MiniStack gap, not a preference.
 | 4 | No `aws_eks_pod_identity_association` | `CreatePodIdentityAssociation` returns `No route`. The binding would be inert against k3s anyway. |
 | 5 | No `assume_role` on provider or backend | MiniStack authenticates purely on the access key. There is no role to assume. |
 
-**Divergence 1 is the one that matters.** The auth path `ci` exercises is not the
-one production uses, so a green `ci` run does not prove exec-auth works. It proves
+**Divergence 1 is the one that matters.** The auth path `ci-hub` exercises is not
+the one production uses, so a green `ci-hub` run does not prove exec-auth works. It proves
 the state/backend/sharing/ordering machinery works, and that the Kubernetes and
 Helm resources apply against a real API server.
 
@@ -62,7 +65,7 @@ requested `1.33`, so add-on versions pinned for 1.33 are not truly exercised.
 
 ---
 
-## Why `ci-apply` goes tier by tier
+## Why `ci-hub-apply` goes tier by tier
 
 Outputs-sharing cannot resolve a producer's outputs until that producer is
 applied, so `tofu init` across the whole environment fails up front with
@@ -85,7 +88,7 @@ of the k3s container that the cluster stack creates.
 
 ## CI safety
 
-`ci` stacks carry a `local` tag, and `preview.yml` filters with
+`ci-hub` stacks carry a `local` tag, and `preview.yml` filters with
 `--tags eks --no-tags local`. Without that, GitHub Actions would try to plan
 `localhost:4566` stacks against real AWS.
 

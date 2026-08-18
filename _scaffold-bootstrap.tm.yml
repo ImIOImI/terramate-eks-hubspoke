@@ -11,6 +11,6 @@ environments:
   infra: { inputs: { ci_entry: true } }
   dev:   { inputs: { ci_entry: false } }
   prd:   { inputs: { ci_entry: false } }
-  # ci is self-contained: it is its own CI entry so it takes no `after` edge on
-  # another account's bootstrap, and can be applied on its own against MiniStack.
-  ci:    { inputs: { ci_entry: true } }
+  # ci-hub is self-contained: it is its own CI entry so it takes no `after` edge
+  # on another account's bootstrap, and can be applied on its own against MiniStack.
+  ci-hub: { inputs: { ci_entry: true } }

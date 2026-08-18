@@ -7,7 +7,8 @@
 # k3s admin client certificate is the only way in, so the kubernetes/helm
 # providers read these files for local envs (components/providers/kubernetes).
 #
-# Run after the ci cluster stack applies, before the provisioning stack.
+# Run after the cluster stack applies, before the provisioning stack (ci-hub, or
+# a future ci-spoke — pass that cluster's name).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,7 +20,7 @@ cluster="${1:-}"
 container="$(docker ps --format '{{.Names}}' | grep -E "ministack-eks-.*-${cluster}\$" | head -1 || true)"
 [[ -n $container ]] || {
   echo "error: no k3s container for cluster '$cluster'." >&2
-  echo "       Apply the ci cluster stack first, and make sure ministack was started" >&2
+  echo "       Apply the cluster stack first, and make sure ministack was started" >&2
   echo "       with the docker socket mounted (make ci-up)." >&2
   exit 1
 }

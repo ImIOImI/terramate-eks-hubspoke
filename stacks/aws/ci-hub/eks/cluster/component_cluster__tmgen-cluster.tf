@@ -19,7 +19,7 @@ module "eks" {
   enable_irsa                              = false
   endpoint_public_access                   = true
   kubernetes_version                       = "1.33"
-  name                                     = "tmhs-eks-ci"
+  name                                     = "tmhs-eks-ci-hub"
   source                                   = "terraform-aws-modules/eks/aws"
   subnet_ids                               = var.private_subnet_ids
   version                                  = "21.24.0"

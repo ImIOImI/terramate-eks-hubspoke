@@ -22,7 +22,7 @@ provider "aws" {
   }
   default_tags {
     tags = {
-      Env     = "ci"
+      Env     = "ci-hub"
       Project = "terramate-eks-hubspoke"
     }
   }

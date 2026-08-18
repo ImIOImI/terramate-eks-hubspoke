@@ -1,3 +1,0 @@
-stack {
-  id = "ci-bootstrap"
-}

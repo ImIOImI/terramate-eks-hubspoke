@@ -12,7 +12,10 @@ globals {
     # `endpoint` is what makes an env local: every component that talks to AWS
     # checks for it and redirects there instead. account_id must be the 12 digits
     # used as the access key -- MiniStack turns that into the account id.
-    ci = {
+    # `ci-hub` plays the hub role (ArgoCD); a future `ci-spoke` would register
+    # against it, sharing this one MiniStack endpoint. Nothing keys off the
+    # string, so adding that spoke is just another entry here.
+    "ci-hub" = {
       account_id = "000000000099"
       region     = "us-east-1"
       endpoint   = "http://localhost:4566"

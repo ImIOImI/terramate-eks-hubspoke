@@ -3,14 +3,14 @@
 define "bundle" {
   input "aws_account_map" {
     default = {
-      ci = {
+      ci-hub = {
         account_id      = "000000000099"
-        cluster_name    = "tmhs-eks-ci"
+        cluster_name    = "tmhs-eks-ci-hub"
         deploy_role_arn = "arn:aws:iam::000000000099:role/tmhs-deploy"
         endpoint        = "http://localhost:4566"
-        lock_table      = "tmhs-locks-ci"
+        lock_table      = "tmhs-locks-ci-hub"
         region          = "us-east-1"
-        state_bucket    = "tmhs-state-ci-000000000099"
+        state_bucket    = "tmhs-state-ci-hub-000000000099"
       }
       dev = {
         account_id      = "222222222222"

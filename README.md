@@ -88,7 +88,7 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 | Scaffold | repo root | `_scaffold-cluster.tm.yml`, `_scaffold-bootstrap.tm.yml` — the only hand-written instance layer |
 | Stacks | `stacks/aws/{infra,dev,prd}/` | Generated; never edit |
 | CI | `.github/workflows/` | `preview.yml` (PR), `deploy.yml` (merge to main) |
-| Local `ci` env | `MINISTACK.md` | Running the whole chain on [MiniStack](https://ministack.org) with no AWS account |
+| Local `ci-hub` env | `MINISTACK.md` | Running the whole chain on [MiniStack](https://ministack.org) with no AWS account |
 | Bootstrapping | `BOOTSTRAPPING.md` | First-run order: why bootstrap precedes the cluster stacks, derived stack ids |
 | Make helpers | `make/` | `stack-ids.sh` (derive ids from scaffolds + bundles), `create-stacks.sh` (`make stacks`) |
 | Design | `docs/design.md` | Architecture decisions, layer diagram, pinning table |
@@ -129,7 +129,7 @@ sudo dpkg -i /tmp/terramate.deb
 > you need for this repo; Catalyst is a separate distribution that adds cloud-dashboard
 > features and is not required here.
 
-> **No AWS account?** `make ci-apply` runs the entire chain — including a real
+> **No AWS account?** `make ci-hub-apply` runs the entire chain — including a real
 > ArgoCD install — against [MiniStack](https://ministack.org) locally. See
 > [MINISTACK.md](MINISTACK.md).
 

@@ -8,7 +8,7 @@ module "vpc" {
   cidr                 = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_nat_gateway   = true
-  name                 = "tmhs-eks-ci-vpc"
+  name                 = "tmhs-eks-ci-hub-vpc"
   private_subnet_tags = {
     "kubernetes.io/role/internal-elb" = 1
   }

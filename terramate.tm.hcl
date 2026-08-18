@@ -29,7 +29,7 @@ environment {
 }
 
 environment {
-  id          = "ci"
-  name        = "Local CI"
-  description = "Local MiniStack-backed environment for testing the stack chain without AWS"
+  id          = "ci-hub"
+  name        = "Local CI Hub"
+  description = "Local MiniStack-backed hub (ArgoCD) for testing the stack chain without AWS; a future ci-spoke registers against it"
 }

@@ -50,6 +50,8 @@ environments:
       role: spoke
       hub_env: infra
   # Local MiniStack environment -- hub so it stands alone (no infra dependency).
-  ci:
+  # A future ci-spoke would take role: spoke + hub_env: ci-hub, sharing this
+  # same MiniStack endpoint.
+  ci-hub:
     inputs:
       role: hub
