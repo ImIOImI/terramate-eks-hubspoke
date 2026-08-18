@@ -97,7 +97,12 @@ define bundle stack "network" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/network"
     name        = "eks-network-${bundle.environment.id}"
     description = "VPC + subnets for ${bundle.environment.id}"
-    tags        = ["eks", "network", "env-${bundle.environment.id}"]
+    tags        = ["eks", "network", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
+    # Anchors the whole eks chain behind this account's bootstrap: every stack here
+    # keys state to the S3 bucket + lock table + tmhs-deploy role that bootstrap
+    # creates, so `tofu init` fails until it exists. cluster/nodes/provisioning
+    # inherit the edge transitively through network.
+    after = ["/stacks/aws/${bundle.environment.id}/bootstrap"]
   }
 
   component "network" {
@@ -141,7 +146,7 @@ define bundle stack "cluster" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/cluster"
     name        = "eks-cluster-${bundle.environment.id}"
     description = "EKS control plane for ${bundle.environment.id}"
-    tags        = ["eks", "cluster", "env-${bundle.environment.id}"]
+    tags        = ["eks", "cluster", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
     after       = ["/stacks/aws/${bundle.environment.id}/eks/network"]
   }
 
@@ -190,7 +195,7 @@ define bundle stack "nodes" {
     path        = "/stacks/aws/${bundle.environment.id}/eks/nodes"
     name        = "eks-nodes-${bundle.environment.id}"
     description = "Managed node group for ${bundle.environment.id}"
-    tags        = ["eks", "nodes", "env-${bundle.environment.id}"]
+    tags        = ["eks", "nodes", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"]
     after       = ["/stacks/aws/${bundle.environment.id}/eks/cluster"]
   }
 

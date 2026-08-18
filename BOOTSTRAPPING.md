@@ -14,6 +14,7 @@ each step has to come where it does.
 make generate                      # stacks/ is committed, so this is usually a no-op
 
 # 1. bootstrap — LOCAL state, admin creds, one account at a time, infra FIRST
+#    (`terramate list --run-order --tags bootstrap` prints this order for you)
 cd stacks/aws/infra/bootstrap && tofu init && tofu apply && cd -
 cd stacks/aws/dev/bootstrap   && tofu init && tofu apply && cd -
 cd stacks/aws/prd/bootstrap   && tofu init && tofu apply && cd -
@@ -77,29 +78,57 @@ pre-existing state infrastructure. That is the only reason the sequence can star
 at all. Once they have created the buckets you flip the input to `s3` and migrate
 (step 2 above).
 
-### 3. Nothing in the dependency graph encodes this
+### 3. The graph encodes the ordering, but cannot run it for you
 
-The bootstrap stacks and the cluster stacks are in **separate bundles with no
-`after` edge between them**, and bootstrap is not tagged `eks`:
+Each environment's `network` stack declares `after = /stacks/aws/<env>/bootstrap`,
+which anchors that whole environment's chain behind its bootstrap stack —
+`cluster`, `nodes`, and `provisioning` inherit the edge transitively. The non-CI
+bootstrap stacks in turn declare `after = /stacks/aws/<ci_env>/bootstrap`:
 
 ```console
 $ terramate list --run-order
 bundles/account-bootstrap
 bundles/eks-cluster
-stacks/aws/dev/bootstrap        # same level as the network stacks —
-stacks/aws/dev/eks/network      # alphabetical, not a dependency edge
-stacks/aws/infra/bootstrap
-stacks/aws/infra/eks/network
+stacks/aws/infra/bootstrap      # CI account first: it owns the gha-ci role
+stacks/aws/dev/bootstrap        # spokes' deploy roles trust that role
+stacks/aws/infra/eks/network    # each env's eks chain sits behind its own bootstrap
+stacks/aws/prd/bootstrap
+stacks/aws/dev/eks/network
+stacks/aws/infra/eks/cluster
 ...
-
-$ terramate list --tags eks | wc -l
-12                              # the 12 cluster stacks; no bootstrap stacks
 ```
 
-So `terramate run --tags eks` will happily try to init cluster stacks against a
-bucket that does not exist. **The ordering is a human step, documented here.**
-This is deliberate — bootstrap runs with admin credentials on local state and is
-explicitly excluded from CI.
+That makes `--run-order` and any whole-repo run correct by construction, and it
+gives you a correctly ordered per-environment sequence:
+
+```console
+$ terramate list --run-order --tags env-dev
+stacks/aws/dev/bootstrap
+stacks/aws/dev/eks/network
+stacks/aws/dev/eks/cluster
+stacks/aws/dev/eks/nodes
+stacks/aws/dev/eks/provisioning
+```
+
+**What the graph still cannot do is apply it in one command**, for two reasons:
+
+- **Credentials change per account.** Each bootstrap stack runs on ambient admin
+  credentials for *its own* account, so the three applies cannot share one
+  `terramate run` invocation unless you wire up per-stack AWS profiles.
+- **Bootstrap is deliberately excluded from CI.** It is not tagged `eks`, so the
+  workflows never touch it:
+
+  ```console
+  $ terramate list --tags eks | wc -l
+  12                            # the 12 cluster stacks; no bootstrap stacks
+  ```
+
+  An `after` edge pointing at a stack that the tag filter excluded is honored for
+  *ordering* but never pulls the target into the run set — verified with
+  `terramate run --tags eks --dry-run`, which lists no bootstrap stack. So CI
+  still plans only cluster stacks, and `terramate run --tags eks` on a greenfield
+  account will still fail at `tofu init` against a bucket that does not exist.
+  The graph tells you the order; it does not tell CI to bootstrap.
 
 ---
 
@@ -124,6 +153,18 @@ resource "aws_iam_role" "deploy" {
 IAM rejects a trust policy naming a principal that does not exist
 (`MalformedPolicyDocument`), so applying the `dev` or `prd` bootstrap before the
 `infra` one will fail. Apply infra first, then the spokes in any order.
+
+This is encoded: the account-bootstrap bundle takes a `ci_env` input (default
+`infra`) naming the account that owns the OIDC provider and `gha-ci` role, and
+every stack whose `ci_entry` is false declares `after = /stacks/aws/<ci_env>/bootstrap`.
+The CI account's own bootstrap gets an empty `after`, so there is no cycle. The
+same input feeds the trust-policy ARN in `components/bootstrap`, so the edge and
+the policy can never disagree.
+
+```console
+$ terramate list --tags ci-entry
+stacks/aws/infra/bootstrap
+```
 
 ---
 
@@ -198,12 +239,30 @@ writes per-env:
 Everything above except the applies can be checked offline:
 
 ```bash
-make generate                       # idempotent; "Nothing to do" on a clean clone
-make check                          # generate + fail if it dirtied the tree
-terramate list --run-order          # ordering and levels
-terramate list --tags env-dev:eks   # per-env fan-out (4 stacks)
+make generate                              # idempotent; "Nothing to do" on a clean clone
+make check                                 # generate + fail if it dirtied the tree
+terramate list --run-order                 # whole-repo order, bootstrap first
+terramate list --run-order --tags bootstrap  # the three bootstrap applies, in order
+terramate list --run-order --tags env-dev  # one env end to end, bootstrap included
+terramate list --tags eks | wc -l          # 12 — proves CI still excludes bootstrap
+terramate run --tags eks --dry-run -- true # no bootstrap stack appears
 grep -A4 'backend "s3"' stacks/aws/dev/eks/network/component_required__tmgen-terraform.tf
 ```
+
+## Tag reference
+
+| Tag | Selects |
+|---|---|
+| `bootstrap` | the three account-bootstrap stacks |
+| `ci-entry` | just the account that owns the OIDC provider + `gha-ci` role |
+| `eks` | the 12 cluster stacks — **the CI filter; excludes bootstrap** |
+| `env-<id>` | everything in one environment, bootstrap included |
+| `env-<id>:eks` | one environment's four cluster stacks (CI's per-env filter) |
+| `role-hub` / `role-spoke` | cluster stacks by hub/spoke role, across environments |
+| `network` / `cluster` / `nodes` / `provisioning` | one tier across all environments |
+
+Combine with `:` for AND — `--tags env-prd:eks`. Add `--run-order` to any of them
+to get the correct apply sequence.
 
 ---
 

@@ -197,22 +197,26 @@ Run order (all stacks):
 
 ```bash
 $ terramate list --run-order
-stacks/aws/dev/bootstrap
-stacks/aws/dev/eks/network
 stacks/aws/infra/bootstrap
+stacks/aws/dev/bootstrap
 stacks/aws/infra/eks/network
 stacks/aws/prd/bootstrap
+stacks/aws/dev/eks/network
+stacks/aws/infra/eks/cluster
 stacks/aws/prd/eks/network
 stacks/aws/dev/eks/cluster
-stacks/aws/infra/eks/cluster
+stacks/aws/infra/eks/nodes
 stacks/aws/prd/eks/cluster
 stacks/aws/dev/eks/nodes
-stacks/aws/infra/eks/nodes
-stacks/aws/prd/eks/nodes
 stacks/aws/infra/eks/provisioning
+stacks/aws/prd/eks/nodes
 stacks/aws/dev/eks/provisioning
 stacks/aws/prd/eks/provisioning
 ```
+
+The bootstrap stacks lead because each environment's `network` stack is `after`
+its own bootstrap, and the spoke bootstraps are `after` the CI account's. See
+[BOOTSTRAPPING.md](BOOTSTRAPPING.md) for why.
 
 > **Note:** `terramate list --run-order` also lists the two `bundles/*` definition stacks first (they carry no `.tf` files and are excluded from CI by the `eks` tag filter).
 
@@ -229,8 +233,20 @@ Bootstrap stacks create the S3 state bucket, DynamoDB lock table, deploy role, a
 (infra only) the GitHub OIDC provider and `gha-ci` entry role.  They are applied
 locally with admin credentials and are excluded from CI.
 
-For each account, switch to credentials for that account (env vars, `aws configure`,
-or `--profile`), then:
+**Apply `infra` first** — the `dev` and `prd` deploy roles trust the `gha-ci` role
+that only the infra bootstrap creates, and IAM rejects a trust policy naming a
+principal that does not exist. The graph knows this order:
+
+```bash
+$ terramate list --run-order --tags bootstrap
+stacks/aws/infra/bootstrap
+stacks/aws/dev/bootstrap
+stacks/aws/prd/bootstrap
+```
+
+Each stack runs on ambient admin credentials for **its own** account, so apply them
+one at a time rather than in a single `terramate run`. Switch credentials (env vars,
+`aws configure`, or `--profile`), then:
 
 ```bash
 cd stacks/aws/infra/bootstrap
