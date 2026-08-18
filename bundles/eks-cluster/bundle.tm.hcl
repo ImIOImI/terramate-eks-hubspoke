@@ -63,7 +63,7 @@ define "bundle" {
 
   # ── mint-then-wire stack-id inputs (SPIKE C.3) ──────────────────────────────
   # Bundle-generated stacks get auto-UUIDs; cross-stack from_stack_id cannot be
-  # deterministic. These are wired per-environment in scaffold/cluster.tm.yml
+  # deterministic. These are wired per-environment in _scaffold-cluster.tm.yml
   # AFTER the first `make generate` mints the UUIDs (see that file's header).
   # Empty defaults let the first mint pass succeed; the placeholder-UUID default
   # (below) keeps the sharing input blocks syntactically valid on that pass.
@@ -84,7 +84,7 @@ define "bundle" {
   }
 
   scaffolding {
-    path = "/scaffold/cluster.tm.yml"
+    path = "/_scaffold-cluster.tm.yml"
     name = "cluster"
   }
 }

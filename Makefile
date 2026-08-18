@@ -1,7 +1,10 @@
-.PHONY: generate check validate lint
+.PHONY: generate wire check validate lint
 generate:        ## two passes: object-layer _tmgen inputs, then bundle stacks
 	terramate generate
 	terramate generate
+
+wire:            ## mint-then-wire step 2: copy minted stack UUIDs into _scaffold-cluster.tm.yml
+	./scripts/wire-stack-ids.sh
 
 check: generate
 	git diff --exit-code --stat -- . ':!docs'

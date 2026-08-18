@@ -32,7 +32,7 @@ define "bundle" {
   }
 
   scaffolding {
-    path = "/scaffold/bootstrap.tm.yml"
+    path = "/_scaffold-bootstrap.tm.yml"
     name = "bootstrap"
   }
 }

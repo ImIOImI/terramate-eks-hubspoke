@@ -17,15 +17,17 @@
 #   1. `make generate` once with the *_stack_id keys ABSENT (bundle
 #      placeholder-UUID defaults apply) — mints 12 stacks, each writing its own
 #      UUID into stacks/aws/<env>/eks/<child>/stack.tm.hcl.
-#   2. Read each env's network + cluster UUID (and infra's cluster UUID for the
-#      hub wiring) and write them into environments.<env>.inputs below:
+#   2. `make wire` (scripts/wire-stack-ids.sh) reads those UUIDs back and writes
+#      them into environments.<env>.inputs below:
 #        network_stack_id     = <env>/eks/network  stack UUID
 #        cluster_stack_id     = <env>/eks/cluster  stack UUID
-#        hub_cluster_stack_id = infra/eks/cluster  stack UUID  (spokes only)
-#   3. `make generate` again (idempotent) — the sharing input blocks now carry
-#      real from_stack_ids and generation converges.
-# To re-mint from scratch: remove the *_stack_id keys, regenerate, re-read the
-# minted UUIDs, rewire here, regenerate.
+#        hub_cluster_stack_id = hub/eks/cluster    stack UUID  (spokes only)
+#   3. `make generate` again — the sharing input blocks now carry real
+#      from_stack_ids and generation converges (idempotent from here on).
+#
+# You do NOT need to do this for a plain clone: the UUIDs below already match
+# the committed stacks/. It is only required if you blow away stacks/ or rename
+# a stack path. See BOOTSTRAPPING.md for the full first-run sequence.
 # ============================================================================
 apiVersion: terramate.io/cli/v1
 kind: BundleInstance
@@ -49,20 +51,20 @@ spec:
 environments:
   infra:
     inputs:
-      role: hub
       network_stack_id: "1345fdff-3d2a-44e2-af1e-2b89829f9927"
       cluster_stack_id: "bc7799df-a6e7-4eff-af43-4bba3bcca064"
+      role: hub
   dev:
     inputs:
-      role: spoke
-      hub_env: infra
       network_stack_id: "25cbafe4-f84c-42cf-8b9f-0f7a0537c7c7"
       cluster_stack_id: "cfb032a8-3d93-4ead-8d5b-0d35f4fd3596"
       hub_cluster_stack_id: "bc7799df-a6e7-4eff-af43-4bba3bcca064"
-  prd:
-    inputs:
       role: spoke
       hub_env: infra
+  prd:
+    inputs:
       network_stack_id: "9970ab7c-f545-422a-892b-39d2ed16f20b"
       cluster_stack_id: "4a4924ee-b872-496e-bb0d-d0e63dea8ed2"
       hub_cluster_stack_id: "bc7799df-a6e7-4eff-af43-4bba3bcca064"
+      role: spoke
+      hub_env: infra

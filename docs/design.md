@@ -56,9 +56,8 @@ components/                 # network, eks-cluster, eks-nodes, argocd-hub, argoc
 bundles/
   account-bootstrap/
   eks-cluster/              # role = "hub" | "spoke" input
-scaffold/
-  bootstrap.tm.yml          # one BundleInstance, environments: infra/dev/prd
-  cluster.tm.yml            # one BundleInstance, environments: infra(hub)/dev(spoke)/prd(spoke)
+_scaffold-bootstrap.tm.yml  # one BundleInstance, environments: infra/dev/prd
+_scaffold-cluster.tm.yml    # one BundleInstance, environments: infra(hub)/dev(spoke)/prd(spoke)
 stacks/                     # generated only — never hand-edited
 .github/workflows/          # preview.yml, deploy.yml
 README.md                   # showcase narrative + clone-to-running walkthrough
@@ -79,7 +78,7 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 
 ## Scaffold files (the only hand-written instance layer)
 
-`scaffold/cluster.tm.yml`:
+`_scaffold-cluster.tm.yml`:
 
 ```yaml
 apiVersion: terramate.io/cli/v1
@@ -107,7 +106,7 @@ environments:
   prd:   { inputs: { role: spoke, hub_env: infra } }
 ```
 
-`scaffold/bootstrap.tm.yml`: one `account-bootstrap` instance across all three
+`_scaffold-bootstrap.tm.yml`: one `account-bootstrap` instance across all three
 environments; `ci_entry: true` overridden in `infra` only.
 
 ## Generated stack tree
@@ -202,7 +201,7 @@ Inputs: `role` (hub|spoke), `hub_env` (spokes), `node_instance_types`,
 
 ## Explicit version pinning (generalized pattern)
 
-> **Note:** Versions below are illustrative from the design phase — `scaffold/cluster.tm.yml` carries the live pins.
+> **Note:** Versions below are illustrative from the design phase — `_scaffold-cluster.tm.yml` carries the live pins.
 
 Every dependency is pinned in exactly one hand-written place; nothing floats.
 
