@@ -17,7 +17,6 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 MAP_FILES=(
-  bundles/account-bootstrap/_tmgen-input-account-map.tm.hcl
   bundles/eks-cluster/_tmgen-input-account-map.tm.hcl
 )
 

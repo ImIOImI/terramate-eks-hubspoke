@@ -43,9 +43,8 @@ that compose top-to-bottom:
 ```text
 objects/                     # shared input definitions; backend + aws provider generators
 components/                  # network, eks-cluster, eks-nodes, argocd-hub, argocd-spoke, bootstrap
-bundles/                     # eks-cluster/ and account-bootstrap/ — assemble components into a deployable unit
-_scaffold-bootstrap.tm.yml   # BundleInstance: one per bundle, at the repo root, fanning out via environments
-_scaffold-cluster.tm.yml     #
+bundles/                     # eks-cluster/ — assembles components into the full per-account tree
+_scaffold-cluster.tm.yml     # BundleInstance at the repo root, fanning out via environments
 stacks/                      # generated only — never hand-edited
 ```
 
@@ -56,11 +55,9 @@ with per-environment input overrides.  The `stacks/` directory is the generated 
 `make generate` and is committed so CI never needs to run generation.
 
 ```text
-_scaffold-cluster.tm.yml    ─── eks-cluster bundle ──► stacks/aws/infra/eks/{network,cluster,nodes,provisioning}
-                                                   ──► stacks/aws/dev/eks/{network,cluster,nodes,provisioning}
-                                                   ──► stacks/aws/prd/eks/{network,cluster,nodes,provisioning}
-
-_scaffold-bootstrap.tm.yml  ─── account-bootstrap ──► stacks/aws/{infra,dev,prd}/bootstrap
+_scaffold-cluster.tm.yml ─── eks-cluster bundle ──► stacks/aws/<env>/bootstrap
+                                                ──► stacks/aws/<env>/eks/{network,cluster,nodes,provisioning}
+                                                    (for env in infra, dev, prd, ci-hub)
 ```
 
 Within each cluster, stacks run in dependency order automatically:
@@ -84,8 +81,8 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 |---|---|---|
 | Objects | `objects/` | Shared input schemas; generates backend HCL + AWS provider blocks |
 | Components | `components/` | `network`, `eks-cluster`, `eks-nodes`, `eks-core-addons`, `argocd-hub`, `argocd-spoke`, `bootstrap`, `providers` |
-| Bundles | `bundles/` | `eks-cluster/` (role=hub or spoke), `account-bootstrap/` |
-| Scaffold | repo root | `_scaffold-cluster.tm.yml`, `_scaffold-bootstrap.tm.yml` — the only hand-written instance layer |
+| Bundles | `bundles/` | `eks-cluster/` — the full per-account tree (bootstrap + eks chain), role=hub or spoke |
+| Scaffold | repo root | `_scaffold-cluster.tm.yml` — the only hand-written instance layer |
 | Stacks | `stacks/aws/{infra,dev,prd}/` | Generated; never edit |
 | CI | `.github/workflows/` | `preview.yml` (PR), `deploy.yml` (merge to main) |
 | Local `ci-hub` env | `MINISTACK.md` | Running the whole chain on [MiniStack](https://ministack.org) with no AWS account |
@@ -166,16 +163,16 @@ envs = {
 }
 ```
 
-Edit `_scaffold-bootstrap.tm.yml` — add the ARN(s) of the IAM user or role you will use
-for the initial local apply (your admin credentials):
+Bootstrap auto-trusts whoever runs the apply (`data.aws_caller_identity`), so you
+usually add nothing here. Only under **AWS SSO** (whose role ARN can't be derived
+from the STS session ARN) or to trust extra principals, add them to
+`admin_principal_arns` in `_scaffold-cluster.tm.yml`:
 
 ```yaml
 spec:
   inputs:
     admin_principal_arns:
-      - "arn:aws:iam::111111111111:user/your-admin-user"
-      - "arn:aws:iam::222222222222:user/your-admin-user"
-      - "arn:aws:iam::333333333333:user/your-admin-user"
+      - "arn:aws:iam::111111111111:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Admin_xxxx"
 ```
 
 ### Step 2 — Generate stacks
@@ -269,7 +266,7 @@ respective account credentials.
 After all three bootstrap stacks are applied, the S3 buckets exist and you can migrate
 the bootstrap state into them.
 
-Edit `_scaffold-bootstrap.tm.yml`, flip `state_backend`:
+Edit `_scaffold-cluster.tm.yml`, flip `state_backend`:
 
 ```yaml
 spec:
@@ -514,7 +511,7 @@ terramate run --reverse --tags env-infra:eks --enable-sharing -- tofu destroy
 **Bootstrap teardown** — bootstrap stacks are not tagged `eks` so the above commands
 exclude them.  If you want to remove the bootstrap infrastructure too:
 
-1. Flip `state_backend` back to `local` in `_scaffold-bootstrap.tm.yml` and run
+1. Flip `state_backend` back to `local` in `_scaffold-cluster.tm.yml` and run
    `make generate`.
 2. In each bootstrap stack dir, run `tofu init -migrate-state` to pull state back local.
 3. Run `tofu destroy` in each bootstrap dir with that account's admin creds

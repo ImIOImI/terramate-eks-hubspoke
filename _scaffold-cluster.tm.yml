@@ -1,13 +1,20 @@
 # ============================================================================
-# eks-cluster BundleInstance — three clusters from one scaffold via environments.
+# eks-cluster BundleInstance — the full per-account stack tree from one scaffold
+# via environments (bootstrap folded in from the former account-bootstrap bundle).
 #
-#   infra  -> role: hub   (ArgoCD hub cluster + CI account)
+#   infra  -> role: hub    oidc_entry: true   (ArgoCD hub + GitHub OIDC entry)
 #   dev    -> role: spoke  (hub_env: infra)
 #   prd    -> role: spoke  (hub_env: infra)
+#   ci-hub -> role: hub    oidc_entry: true   (local MiniStack; stands alone)
 #
-# Each environment fans out to four stacks: network -> cluster -> nodes ->
-# provisioning (SPIKE A.3/B.2). Spoke provisioning also runs AFTER infra
-# provisioning (the hub ArgoCD + cluster-secret target must exist first).
+# Each environment fans out to five stacks: bootstrap -> network -> cluster ->
+# nodes -> provisioning. Spoke provisioning also runs AFTER hub provisioning (the
+# hub ArgoCD + cluster-secret target must exist first); non-entry bootstraps run
+# AFTER the oidc_entry account's bootstrap.
+#
+# `deploy_role_arn` (per env, optional): leave empty to have bootstrap create
+# tmhs-deploy and trust the caller; set it to adopt an existing role and skip
+# bootstrap (that role must already exist and be assumable by your identity).
 #
 # ── STACK IDS ───────────────────────────────────────────────────────────────
 # There is no *_stack_id wiring here any more. Stack ids are derived from stack
@@ -37,10 +44,13 @@ spec:
       aws-ebs-csi-driver: "v1.48.0-eksbuild.2"
       eks-pod-identity-agent: "v1.3.8-eksbuild.2"
     argocd_chart_version: "10.1.2"
+    state_backend: local          # bootstrap: flip to s3 after first apply + migrate (BOOTSTRAPPING.md)
+    admin_principal_arns: []      # extra principals to trust on the deploy role (e.g. an SSO role)
 environments:
   infra:
     inputs:
       role: hub
+      oidc_entry: true            # hosts the GitHub OIDC provider + gha-ci entry role
   dev:
     inputs:
       role: spoke
@@ -55,3 +65,4 @@ environments:
   ci-hub:
     inputs:
       role: hub
+      oidc_entry: true

@@ -24,4 +24,9 @@ define "component" {
     description = "whether to add assume_role block to aws provider"
     default     = true
   }
+  input "deploy_role_arn" {
+    type        = string
+    description = "explicit deploy-role ARN to assume; empty = derive tmhs-deploy from the account map"
+    default     = ""
+  }
 }

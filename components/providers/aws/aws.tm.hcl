@@ -8,7 +8,7 @@ generate_hcl "_tmgen-provider-aws.tf" {
       region = let.acct.region
       tm_dynamic "assume_role" {
         condition  = component.input.assume_role.value
-        attributes = { role_arn = let.acct.deploy_role_arn }
+        attributes = { role_arn = component.input.deploy_role_arn.value != "" ? component.input.deploy_role_arn.value : let.acct.deploy_role_arn }
       }
       default_tags {
         tags = component.input.default_tags.value

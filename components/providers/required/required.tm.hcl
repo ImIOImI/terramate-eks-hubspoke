@@ -22,7 +22,7 @@ generate_hcl "_tmgen-terraform.tf" {
         dynamodb_table = let.acct.lock_table
         tm_dynamic "assume_role" {
           condition  = component.input.backend_assume_role.value
-          attributes = { role_arn = let.acct.deploy_role_arn }
+          attributes = { role_arn = component.input.deploy_role_arn.value != "" ? component.input.deploy_role_arn.value : let.acct.deploy_role_arn }
         }
       }
     }

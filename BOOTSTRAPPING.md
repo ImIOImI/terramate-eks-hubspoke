@@ -13,41 +13,49 @@ each step has to come where it does.
 ## TL;DR
 
 ```bash
-# 0. edit config.tm.hcl (account IDs) and _scaffold-bootstrap.tm.yml (admin ARNs)
+# 0. edit config.tm.hcl (account IDs); _scaffold-cluster.tm.yml only if you use SSO
 make stacks                        # seed derived stack ids (no-op on a plain clone)
 make generate                      # stacks/ is committed, so this is usually a no-op
 
-# 1. bootstrap — LOCAL state, admin creds, one account at a time, infra FIRST
-#    (`terramate list --run-order --tags bootstrap` prints this order for you)
-cd stacks/aws/infra/bootstrap && tofu init && tofu apply && cd -
-cd stacks/aws/dev/bootstrap   && tofu init && tofu apply && cd -
-cd stacks/aws/prd/bootstrap   && tofu init && tofu apply && cd -
+# 1. stand each account up end to end, one command, from your admin creds
+#    (infra FIRST: the spokes' deploy roles trust the gha-ci role it creates)
+make apply ENV=infra               # bootstrap -> network -> cluster -> nodes -> provisioning
+make apply ENV=dev
+make apply ENV=prd
+```
 
-# 2. migrate bootstrap state to the S3 buckets it just created
-#    flip state_backend: local -> s3 in _scaffold-bootstrap.tm.yml
-make generate
-for e in infra dev prd; do (cd stacks/aws/$e/bootstrap && tofu init -migrate-state); done
+`make apply` runs the tiers in order (outputs-sharing forbids a whole-chain init).
+On the create path, `bootstrap` creates `tmhs-deploy`, trusts your caller via
+`data.aws_caller_identity`, and a propagation gate waits until STS honors the
+assume before the eks tiers assume it — so it all works in one invocation.
+**Requires the AWS CLI** on your machine (the gate polls `sts assume-role`).
 
-# 3. only now can the cluster stacks initialize
-terramate run --tags env-infra:eks --enable-sharing -- tofu init
-terramate run --tags env-infra:eks --enable-sharing -- tofu apply
-# ...then env-dev:eks, then env-prd:eks
+The manual, tier-by-tier equivalent — and the one-time migration of *bootstrap's
+own* state from local to S3 — is spelled out below.
+
+```bash
+# manual bootstrap (what `make apply` automates for the bootstrap tier):
+terramate run --tags env-infra:bootstrap -- tofu init
+terramate run --tags env-infra:bootstrap -- tofu apply     # LOCAL state, admin creds
+# migrate bootstrap state to the S3 bucket it just created (optional, one-time):
+#   flip state_backend: local -> s3 in _scaffold-cluster.tm.yml, make generate,
+#   then: (cd stacks/aws/infra/bootstrap && tofu init -migrate-state)
 ```
 
 ---
 
-## The two scaffolds
+## The scaffold
 
-Both `BundleInstance` files live at the repo root, prefixed `_scaffold-`:
+One `BundleInstance` file at the repo root drives the whole per-account tree
+(bootstrap was folded in from the former `account-bootstrap` bundle):
 
 | File | Bundle | Generates |
 |---|---|---|
-| `_scaffold-bootstrap.tm.yml` | `bundles/account-bootstrap` | `stacks/aws/{infra,dev,prd}/bootstrap` |
-| `_scaffold-cluster.tm.yml` | `bundles/eks-cluster` | `stacks/aws/{infra,dev,prd}/eks/{network,cluster,nodes,provisioning}` |
+| `_scaffold-cluster.tm.yml` | `bundles/eks-cluster` | `stacks/aws/<env>/bootstrap` + `stacks/aws/<env>/eks/{network,cluster,nodes,provisioning}` |
 
-`terramate generate` reads both regardless of order — **code generation has no
-ordering dependency at all.** You can generate everything in one pass on a clean
-checkout. The ordering constraint is entirely at `tofu init`/`apply` time.
+`terramate generate` has **no ordering dependency at all** — you can generate
+everything in one pass on a clean checkout. The ordering constraint is entirely at
+`tofu init`/`apply` time (which `make apply` sequences for you).
 
 ---
 
@@ -77,7 +85,7 @@ a real apply.
 ### 2. Bootstrap breaks the chicken-and-egg with local state
 
 The bootstrap stacks are generated with `backend "local"` on the first pass
-(`state_backend: local` in `_scaffold-bootstrap.tm.yml`), so they need no
+(`state_backend: local` in `_scaffold-cluster.tm.yml`), so they need no
 pre-existing state infrastructure. That is the only reason the sequence can start
 at all. Once they have created the buckets you flip the input to `s3` and migrate
 (step 2 above).
@@ -87,13 +95,12 @@ at all. Once they have created the buckets you flip the input to `s3` and migrat
 Each environment's `network` stack declares `after = /stacks/aws/<env>/bootstrap`,
 which anchors that whole environment's chain behind its bootstrap stack —
 `cluster`, `nodes`, and `provisioning` inherit the edge transitively. The non-CI
-bootstrap stacks in turn declare `after = /stacks/aws/<ci_env>/bootstrap`:
+bootstrap stacks in turn declare `after = /stacks/aws/<oidc_entry_env>/bootstrap`:
 
 ```console
 $ terramate list --run-order
-bundles/account-bootstrap
 bundles/eks-cluster
-stacks/aws/infra/bootstrap      # CI account first: it owns the gha-ci role
+stacks/aws/infra/bootstrap      # OIDC-entry account first: it owns the gha-ci role
 stacks/aws/dev/bootstrap        # spokes' deploy roles trust that role
 stacks/aws/infra/eks/network    # each env's eks chain sits behind its own bootstrap
 stacks/aws/prd/bootstrap
@@ -114,17 +121,20 @@ stacks/aws/dev/eks/nodes
 stacks/aws/dev/eks/provisioning
 ```
 
-**What the graph still cannot do is apply it in one command**, for two reasons:
+`make apply ENV=<id>` applies **one account** end to end in a single command
+(bootstrap on your ambient creds, then the eks tiers assuming the deploy role the
+bootstrap gate just made assumable). What it still cannot do is apply **all**
+accounts at once, for two reasons:
 
-- **Credentials change per account.** Each bootstrap stack runs on ambient admin
-  credentials for *its own* account, so the three applies cannot share one
-  `terramate run` invocation unless you wire up per-stack AWS profiles.
+- **Credentials change per account.** Each account's bootstrap runs on ambient
+  admin credentials for *its own* account, so you run `make apply` once per account
+  (with that account's creds) — infra first.
 - **Bootstrap is deliberately excluded from CI.** It is not tagged `eks`, so the
   workflows never touch it:
 
   ```console
-  $ terramate list --tags eks | wc -l
-  12                            # the 12 cluster stacks; no bootstrap stacks
+  $ terramate list --tags eks --no-tags local | wc -l
+  12                            # the real-AWS cluster stacks; no bootstrap stacks
   ```
 
   An `after` edge pointing at a stack that the tag filter excluded is honored for
@@ -138,15 +148,16 @@ stacks/aws/dev/eks/provisioning
 
 ## Why `infra` bootstrap comes before `dev` and `prd`
 
-Each account's `tmhs-deploy` role trusts the CI entry role **in the infra
-account**, which only the infra bootstrap stack creates:
+Each account's `tmhs-deploy` role trusts the `gha-ci` entry role **in the infra
+account**, which only the infra bootstrap stack creates. On real AWS the trust
+list is `gha-ci` + the auto-derived caller + any `admin_principal_arns`:
 
 ```hcl
-# stacks/aws/dev/bootstrap/component_bootstrap__tmgen-bootstrap.tf
+# stacks/aws/dev/bootstrap/component_bootstrap__tmgen-deploy-role.tf
 resource "aws_iam_role" "deploy" {
   assume_role_policy = jsonencode({
     Statement = [{
-      Principal = { AWS = ["arn:aws:iam::111111111111:role/tmhs-gha-ci"] }
+      Principal = { AWS = local.deploy_trust }  # gha-ci + caller (+ admin_principal_arns)
       Action    = "sts:AssumeRole"
     }]
   })
@@ -156,42 +167,58 @@ resource "aws_iam_role" "deploy" {
 
 IAM rejects a trust policy naming a principal that does not exist
 (`MalformedPolicyDocument`), so applying the `dev` or `prd` bootstrap before the
-`infra` one will fail. Apply infra first, then the spokes in any order.
+`infra` one will fail (its `gha-ci` ARN wouldn't exist yet). Apply infra first,
+then the spokes in any order.
 
-This is encoded: the account-bootstrap bundle takes a `ci_env` input (default
+This is encoded: the eks-cluster bundle takes an `oidc_entry_env` input (default
 `infra`) naming the account that owns the OIDC provider and `gha-ci` role, and
-every stack whose `ci_entry` is false declares `after = /stacks/aws/<ci_env>/bootstrap`.
-The CI account's own bootstrap gets an empty `after`, so there is no cycle. The
-same input feeds the trust-policy ARN in `components/bootstrap`, so the edge and
-the policy can never disagree.
+every stack whose `oidc_entry` is false declares
+`after = /stacks/aws/<oidc_entry_env>/bootstrap`. The entry account's own
+bootstrap gets an empty `after`, so there is no cycle. The same input feeds the
+trust-policy ARN in `components/bootstrap`, so the edge and the policy can never
+disagree.
 
 ```console
-$ terramate list --tags ci-entry
+$ terramate list --tags oidc-entry
 stacks/aws/infra/bootstrap
+stacks/aws/ci-hub/bootstrap
 ```
 
 ---
 
-## Add your own admin ARN or you will lock yourself out
+## Trusting your own identity
 
-With `admin_principal_arns: []` (the shipped default) the only principal that can
-assume `tmhs-deploy` is the GitHub Actions CI role. Every cluster stack's backend
-does `assume_role { role_arn = ...tmhs-deploy }`, so a **local** `tofu init` on a
-cluster stack fails with an `AccessDenied` on `sts:AssumeRole` unless your own
-identity is in the trust policy.
+On the **create path**, bootstrap auto-trusts whoever runs it: it reads
+`data.aws_caller_identity`, normalizes your assumed-role session ARN to its IAM
+role ARN, and adds it to `tmhs-deploy`'s trust. So `make apply ENV=<id>` (and any
+local `tofu` you run against a cluster stack, whose backend does
+`assume_role { role_arn = ...tmhs-deploy }`) can assume the role with no extra
+config. A propagation gate in bootstrap waits until the assume actually works
+before the eks tiers run.
 
-Before step 1, add your ARNs to `_scaffold-bootstrap.tm.yml`:
+Two cases still need `admin_principal_arns` (set in `_scaffold-cluster.tm.yml`):
 
-```yaml
-spec:
-  inputs:
-    admin_principal_arns:
-      - "arn:aws:iam::111111111111:user/your-admin-user"
-      - "arn:aws:iam::222222222222:user/your-admin-user"
-      - "arn:aws:iam::333333333333:user/your-admin-user"
-```
+- **AWS SSO** — reserved-SSO role ARNs can't be reconstructed from the STS session
+  ARN, so auto-derivation skips them; name your role explicitly:
+  ```yaml
+  spec:
+    inputs:
+      admin_principal_arns:
+        - "arn:aws:iam::111111111111:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Admin_xxxx"
+  ```
+- **Extra principals** — a separate automation role or a teammate who should also
+  assume the deploy role.
 
-If you only ever apply through CI you can leave this empty.
+If you only ever apply through GitHub Actions, leave it empty — the `gha-ci` role
+is always trusted.
+
+### Adopting an existing deploy role
+
+Set `deploy_role_arn` on an env (in `_scaffold-cluster.tm.yml`) to skip bootstrap
+entirely and have the eks tiers assume a role you already manage. **Precondition:
+that role must already exist and be assumable by your current identity** — we do
+not create it, verify it, or grant it trust. Supplying it also implies the
+account's S3 state backend already exists.
 
 ---
 
@@ -251,7 +278,7 @@ State keys are readable as a side effect —
 
 1. Add an `environment {}` block in `terramate.tm.hcl` and an `envs` entry in
    `config.tm.hcl`.
-2. Add the env key to `_scaffold-bootstrap.tm.yml` and `_scaffold-cluster.tm.yml`.
+2. Add the env key to `_scaffold-cluster.tm.yml`.
 3. `make stacks && make generate`.
 
 No id wiring, no UUID round trip.
@@ -297,8 +324,8 @@ grep -A4 'backend "s3"' stacks/aws/dev/eks/network/component_required__tmgen-ter
 
 | Tag | Selects |
 |---|---|
-| `bootstrap` | the account-bootstrap stacks (one per env; 3 real + local `ci-hub`) |
-| `ci-entry` | just the account that owns the OIDC provider + `gha-ci` role |
+| `bootstrap` | the bootstrap stacks (one per env; 3 real + local `ci-hub`) |
+| `oidc-entry` | the accounts that own a GitHub OIDC provider + `gha-ci` role (`infra`, `ci-hub`) |
 | `eks` | the cluster stacks — **CI filters `eks` + `--no-tags local` → the 12 real-AWS stacks; excludes bootstrap** |
 | `local` | MiniStack-backed stacks (the `ci-hub` env); excluded from CI |
 | `env-<id>` | everything in one environment, bootstrap included |

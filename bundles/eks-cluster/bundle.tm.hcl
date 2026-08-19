@@ -66,6 +66,33 @@ define "bundle" {
     default     = "10.0.0.0/16"
   }
 
+  # ── bootstrap inputs (folded in from the former account-bootstrap bundle) ────
+  input "oidc_entry" {
+    type        = bool
+    description = "this env hosts the GitHub OIDC provider + gha-ci entry role (renamed from ci_entry)"
+    default     = false
+  }
+  input "oidc_entry_env" {
+    type        = string
+    description = "env id of the OIDC entry account; its gha-ci ARN is trusted by every deploy role, and non-entry accounts bootstrap after it (renamed from ci_env)"
+    default     = "infra"
+  }
+  input "state_backend" {
+    type        = string
+    description = "bootstrap state backend: local (first apply) or s3 (after migration)"
+    default     = "local"
+  }
+  input "admin_principal_arns" {
+    type        = any
+    description = "extra IAM principal ARNs to trust on the created deploy role (e.g. an SSO role auto-derivation cannot reconstruct)"
+    default     = []
+  }
+  input "deploy_role_arn" {
+    type        = string
+    description = "adopt an existing deploy role: when set, bootstrap is skipped and the eks tiers assume this ARN (it must already exist and be assumable by your current identity); empty = bootstrap creates tmhs-deploy"
+    default     = ""
+  }
+
   # ── derived stack ids ────────────────────────────────────────────────────────
   # Cross-stack outputs-sharing needs each producer stack's id as from_stack_id.
   # Those ids are NOT minted UUIDs here: make/create-stacks.sh seeds every
@@ -99,8 +126,9 @@ define bundle stack "network" {
     # Anchors the whole eks chain behind this account's bootstrap: every stack here
     # keys state to the S3 bucket + lock table + tmhs-deploy role that bootstrap
     # creates, so `tofu init` fails until it exists. cluster/nodes/provisioning
-    # inherit the edge transitively through network.
-    after = ["/stacks/aws/${bundle.environment.id}/bootstrap"]
+    # inherit the edge transitively through network. Conditional: on the adopt path
+    # (deploy_role_arn set) there is no bootstrap stack, so the edge is omitted.
+    after = bundle.input.deploy_role_arn.value == "" ? ["/stacks/aws/${bundle.environment.id}/bootstrap"] : []
   }
 
   component "network" {
@@ -122,16 +150,18 @@ define bundle stack "network" {
       env                 = bundle.environment.id
       state_backend       = "s3"
       backend_assume_role = true
+      deploy_role_arn     = bundle.input.deploy_role_arn.value
     }
   }
 
   component "aws" {
     source = "/components/providers/aws"
     inputs {
-      account_map  = bundle.input.aws_account_map.value
-      env          = bundle.environment.id
-      assume_role  = true
-      default_tags = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
+      account_map     = bundle.input.aws_account_map.value
+      env             = bundle.environment.id
+      assume_role     = true
+      deploy_role_arn = bundle.input.deploy_role_arn.value
+      default_tags    = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
     }
   }
 }
@@ -174,16 +204,18 @@ define bundle stack "cluster" {
       env                 = bundle.environment.id
       state_backend       = "s3"
       backend_assume_role = true
+      deploy_role_arn     = bundle.input.deploy_role_arn.value
     }
   }
 
   component "aws" {
     source = "/components/providers/aws"
     inputs {
-      account_map  = bundle.input.aws_account_map.value
-      env          = bundle.environment.id
-      assume_role  = true
-      default_tags = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
+      account_map     = bundle.input.aws_account_map.value
+      env             = bundle.environment.id
+      assume_role     = true
+      deploy_role_arn = bundle.input.deploy_role_arn.value
+      default_tags    = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
     }
   }
 }
@@ -228,16 +260,18 @@ define bundle stack "nodes" {
       env                 = bundle.environment.id
       state_backend       = "s3"
       backend_assume_role = true
+      deploy_role_arn     = bundle.input.deploy_role_arn.value
     }
   }
 
   component "aws" {
     source = "/components/providers/aws"
     inputs {
-      account_map  = bundle.input.aws_account_map.value
-      env          = bundle.environment.id
-      assume_role  = true
-      default_tags = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
+      account_map     = bundle.input.aws_account_map.value
+      env             = bundle.environment.id
+      assume_role     = true
+      deploy_role_arn = bundle.input.deploy_role_arn.value
+      default_tags    = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
     }
   }
 }
@@ -334,6 +368,69 @@ define bundle stack "provisioning" {
       env                 = bundle.environment.id
       state_backend       = "s3"
       backend_assume_role = true
+      deploy_role_arn     = bundle.input.deploy_role_arn.value
+    }
+  }
+
+  component "aws" {
+    source = "/components/providers/aws"
+    inputs {
+      account_map     = bundle.input.aws_account_map.value
+      env             = bundle.environment.id
+      assume_role     = true
+      deploy_role_arn = bundle.input.deploy_role_arn.value
+      default_tags    = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
+    }
+  }
+}
+
+# ============================================================================
+# bootstrap — account foundation (state bucket, lock table, tmhs-deploy role,
+# and the GitHub OIDC provider + gha-ci role on the oidc_entry account). Runs on
+# ambient admin creds (no assume_role). Folded in from the former
+# account-bootstrap bundle. Generated only when deploy_role_arn is empty (create
+# path); when an existing role is adopted, this stack is skipped.
+# ============================================================================
+define bundle stack "bootstrap" {
+  condition = bundle.input.deploy_role_arn.value == ""
+  metadata {
+    path        = "/stacks/aws/${bundle.environment.id}/bootstrap"
+    name        = "bootstrap-${bundle.environment.id}"
+    description = "Account foundation for ${bundle.environment.id}"
+    # 'oidc-entry' marks the one account that owns the OIDC provider + gha-ci role.
+    tags = tm_concat(
+      ["bootstrap", "env-${bundle.environment.id}"],
+      bundle.input.oidc_entry.value ? ["oidc-entry"] : [],
+      bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
+    )
+    # Every non-entry account's tmhs-deploy trusts arn:...:<oidc_entry_env>:role/tmhs-gha-ci.
+    # IAM rejects a trust policy naming a principal that does not exist, so the
+    # OIDC-entry account's bootstrap must be applied first.
+    after = bundle.input.oidc_entry.value ? [] : ["/stacks/aws/${bundle.input.oidc_entry_env.value}/bootstrap"]
+  }
+
+  component "bootstrap" {
+    source = "/components/bootstrap"
+    inputs {
+      project_prefix       = bundle.input.project_prefix.value
+      env                  = bundle.environment.id
+      account_map          = bundle.input.aws_account_map.value
+      github_repo          = bundle.input.github_repo.value
+      oidc_entry_env       = bundle.input.oidc_entry_env.value
+      oidc_entry           = bundle.input.oidc_entry.value
+      admin_principal_arns = bundle.input.admin_principal_arns.value
+    }
+  }
+
+  component "required" {
+    source = "/components/providers/required"
+    inputs {
+      providers           = { aws = bundle.input.providers_map.value.aws, tls = bundle.input.providers_map.value.tls }
+      tofu_version        = bundle.input.tofu_version.value
+      account_map         = bundle.input.aws_account_map.value
+      env                 = bundle.environment.id
+      state_backend       = bundle.input.state_backend.value
+      backend_assume_role = false # bootstrap runs on ambient admin creds; deploy role doesn't exist yet
     }
   }
 
@@ -342,7 +439,7 @@ define bundle stack "provisioning" {
     inputs {
       account_map  = bundle.input.aws_account_map.value
       env          = bundle.environment.id
-      assume_role  = true
+      assume_role  = false # ditto — deploy role doesn't exist yet
       default_tags = { Project = "terramate-eks-hubspoke", Env = bundle.environment.id }
     }
   }
