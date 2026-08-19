@@ -22,19 +22,19 @@ define "component" {
     type        = string
     description = "GitHub repo slug (owner/repo) for OIDC trust condition"
   }
-  input "ci_env" {
+  input "oidc_entry_env" {
     type        = string
     description = "environment id of the account holding the gha-ci entry role that every deploy role trusts"
     default     = "infra"
   }
-  input "ci_entry" {
+  input "oidc_entry" {
     type        = bool
     description = "Create the GitHub OIDC provider + gha-ci entry role in this account"
     default     = false
   }
   input "admin_principal_arns" {
     type        = any
-    description = "IAM principal ARNs (users/roles) allowed to assume the deploy role"
+    description = "extra IAM principal ARNs to trust on the deploy role, beyond the auto-derived caller"
     default     = []
   }
 }

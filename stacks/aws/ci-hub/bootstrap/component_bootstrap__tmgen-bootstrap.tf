@@ -34,23 +34,6 @@ resource "aws_dynamodb_table" "locks" {
     type = "S"
   }
 }
-resource "aws_iam_role" "deploy" {
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          AWS = [
-            "arn:aws:iam::111111111111:role/tmhs-gha-ci",
-          ]
-        }
-        Action = "sts:AssumeRole"
-      },
-    ]
-  })
-  name = "tmhs-deploy"
-}
 resource "aws_iam_role_policy_attachment" "deploy_admin" {
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
   role       = aws_iam_role.deploy.name
