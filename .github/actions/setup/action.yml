@@ -1,22 +1,49 @@
 name: "Setup Terramate + OpenTofu"
-description: "Install pinned Terramate GA .deb and OpenTofu via the official action."
+description: "Install pinned Terramate GA .deb and a symbols-capable OpenTofu nightly."
 
 inputs:
   terramate_version:
     description: "Terramate GA version to install"
     default: "0.17.1"
-  tofu_version:
-    description: "OpenTofu version to install"
-    default: "1.11.5"
+  tofu_nightly_date:
+    description: >
+      OpenTofu nightly build date (YYYYMMDD) from nightlies.opentofu.org, or
+      "latest". Must be >= 20260825 — the first nightly built from a main that
+      includes the symbol_libraries experiment (merged 2026-08-24, commit
+      5097d2de). SPIKE: symbols are not in any stable release yet, so CI runs a
+      nightly instead of opentofu/setup-opentofu.
+    default: "20260825"
 
 runs:
   using: composite
   steps:
-    - name: Install OpenTofu
-      uses: opentofu/setup-opentofu@v1
-      with:
-        tofu_version: "${{ inputs.tofu_version }}"
-        tofu_wrapper: false
+    - name: Install OpenTofu (symbols-capable nightly)
+      shell: bash
+      env:
+        TOFU_NIGHTLY_DATE: ${{ inputs.tofu_nightly_date }}
+      run: |
+        set -euo pipefail
+        base="https://nightlies.opentofu.org/nightlies"
+        date="${TOFU_NIGHTLY_DATE}"
+        if [ "$date" = "latest" ]; then
+          date="$(curl -fsSL "$base/latest.json" | grep -oE '"date":"[0-9]+"' | head -1 | cut -d'"' -f4)"
+        fi
+        # symbol_libraries landed on main in 5097d2de (2026-08-24 12:44 UTC); the
+        # first nightly to carry it is 20260825. Fail loudly on an older pin so a
+        # symbols-unaware binary never silently passes/blocks CI.
+        if [ "$date" -lt 20260825 ]; then
+          echo "::error::nightly $date predates the symbol_libraries experiment (need >= 20260825)"
+          exit 1
+        fi
+        asset="$(curl -fsSL "$base/$date/" | grep -oE "tofu_nightly-${date}-[0-9a-f]+_linux_amd64\.zip" | head -1)"
+        if [ -z "$asset" ]; then
+          echo "::error::no linux_amd64 nightly found for $date at $base/$date/"
+          exit 1
+        fi
+        curl -fsSL -o /tmp/tofu.zip "$base/$date/$asset"
+        sudo unzip -o /tmp/tofu.zip -d /usr/local/bin tofu
+        sudo chmod +x /usr/local/bin/tofu
+        tofu version
 
     - name: Install Terramate GA
       shell: bash

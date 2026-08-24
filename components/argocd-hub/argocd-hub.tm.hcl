@@ -27,29 +27,15 @@ generate_hcl "_tmgen-argocd-hub.tf" {
     # ArgoCD controller IAM role — pod-identity trust (same pattern as ebs_csi).
     # ---------------------------------------------------------------------------
     resource "aws_iam_role" "argocd_controller" {
-      name = "${let.prefix}-argocd-controller"
-      assume_role_policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect    = "Allow"
-          Principal = { Service = "pods.eks.amazonaws.com" }
-          Action    = ["sts:AssumeRole", "sts:TagSession"]
-        }]
-      })
+      name               = "${let.prefix}-argocd-controller"
+      assume_role_policy = tm_hcl_expression("symbols::iam::pod_identity_trust()")
     }
 
     # Inline policy: allow controller to assume spoke-access roles in each spoke account.
     resource "aws_iam_role_policy" "argocd_assume_spokes" {
-      name = "assume-spoke-access"
-      role = aws_iam_role.argocd_controller.id
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect   = "Allow"
-          Action   = "sts:AssumeRole"
-          Resource = let.spoke_role_arns
-        }]
-      })
+      name   = "assume-spoke-access"
+      role   = aws_iam_role.argocd_controller.id
+      policy = tm_hcl_expression("symbols::iam::assume_role_policy(${tm_jsonencode(let.spoke_role_arns)})")
     }
 
     # ---------------------------------------------------------------------------

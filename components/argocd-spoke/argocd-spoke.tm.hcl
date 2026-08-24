@@ -31,6 +31,8 @@ generate_hcl "_tmgen-argocd-spoke.tf" {
     # condition=false (hub provisioning stack instantiates this component with
     # enabled=false and hub_env=""), so a bare account_map[""] would error.
     hub = tm_try(component.input.account_map.value[component.input.hub_env.value], {})
+    # Controller role ARN in the hub account (resolved at generate time).
+    controller_arn = "arn:aws:iam::${tm_try(let.hub.account_id, "")}:role/${component.input.project_prefix.value}-argocd-controller"
   }
   content {
     # -------------------------------------------------------------------------
@@ -45,17 +47,8 @@ generate_hcl "_tmgen-argocd-spoke.tf" {
     #     IRSA/pod-identity role).
     # -------------------------------------------------------------------------
     resource "aws_iam_role" "spoke_access" {
-      name = "${let.prefix}-argocd-spoke-access"
-      assume_role_policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect = "Allow"
-          Principal = {
-            AWS = "arn:aws:iam::${let.hub.account_id}:role/${let.prefix}-argocd-controller"
-          }
-          Action = ["sts:AssumeRole", "sts:TagSession"]
-        }]
-      })
+      name               = "${let.prefix}-argocd-spoke-access"
+      assume_role_policy = tm_hcl_expression("symbols::iam::aws_principal_trust(${tm_jsonencode(let.controller_arn)}, ${tm_jsonencode(["sts:AssumeRole", "sts:TagSession"])})")
     }
 
     # -------------------------------------------------------------------------

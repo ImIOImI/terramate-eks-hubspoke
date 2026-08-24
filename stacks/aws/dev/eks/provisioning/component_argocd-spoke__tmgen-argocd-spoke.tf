@@ -1,21 +1,10 @@
 // TERRAMATE: GENERATED AUTOMATICALLY DO NOT EDIT
 
 resource "aws_iam_role" "spoke_access" {
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::111111111111:role/tmhs-argocd-controller"
-        }
-        Action = [
-          "sts:AssumeRole",
-          "sts:TagSession",
-        ]
-      },
-    ]
-  })
+  assume_role_policy = symbols::iam::aws_principal_trust("arn:aws:iam::111111111111:role/tmhs-argocd-controller", [
+    "sts:AssumeRole",
+    "sts:TagSession",
+  ])
   name = "tmhs-argocd-spoke-access"
 }
 resource "kubernetes_secret" "registration" {

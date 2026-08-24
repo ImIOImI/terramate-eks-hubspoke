@@ -296,6 +296,12 @@ define bundle stack "provisioning" {
     )
   }
 
+  # Enables the symbol_libraries experiment + binds /lib/iam for the IAM policy
+  # documents rendered by core-addons (ebs-csi) and argocd hub/spoke.
+  component "symbols-iam" {
+    source = "/components/symbols-iam"
+  }
+
   # CoreDNS + EBS CSI — both roles.
   component "core-addons" {
     source = "/components/eks-core-addons"
@@ -407,6 +413,12 @@ define bundle stack "bootstrap" {
     # IAM rejects a trust policy naming a principal that does not exist, so the
     # OIDC-entry account's bootstrap must be applied first.
     after = bundle.input.oidc_entry.value ? [] : ["/stacks/aws/${bundle.input.oidc_entry_env.value}/bootstrap"]
+  }
+
+  # Enables the symbol_libraries experiment + binds /lib/iam for the deploy /
+  # gha-ci IAM policy documents rendered by the bootstrap component.
+  component "symbols-iam" {
+    source = "/components/symbols-iam"
   }
 
   component "bootstrap" {
