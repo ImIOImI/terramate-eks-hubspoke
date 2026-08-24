@@ -16,19 +16,8 @@ locals {
   ], local.caller_trust))
 }
 resource "aws_iam_role" "deploy" {
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          AWS = local.deploy_trust
-        }
-        Action = "sts:AssumeRole"
-      },
-    ]
-  })
-  name = "tmhs-deploy"
+  assume_role_policy = symbols::iam::aws_principal_trust(local.deploy_trust, "sts:AssumeRole")
+  name               = "tmhs-deploy"
 }
 resource "terraform_data" "deploy_role_ready" {
   depends_on = [

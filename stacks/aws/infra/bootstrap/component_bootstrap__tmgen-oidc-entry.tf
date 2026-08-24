@@ -13,39 +13,11 @@ resource "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
 resource "aws_iam_role" "gha_ci" {
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Federated = aws_iam_openid_connect_provider.github.arn
-        }
-        Action = "sts:AssumeRoleWithWebIdentity"
-        Condition = {
-          StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:ImIOImI/terramate-eks-hubspoke:*"
-          }
-        }
-      },
-    ]
-  })
-  name = "tmhs-gha-ci"
+  assume_role_policy = symbols::iam::github_oidc_trust(aws_iam_openid_connect_provider.github.arn, "ImIOImI/terramate-eks-hubspoke")
+  name               = "tmhs-gha-ci"
 }
 resource "aws_iam_role_policy" "gha_ci_assume" {
-  name = "assume-deploy-roles"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = "sts:AssumeRole"
-        Resource = "arn:aws:iam::*:role/tmhs-deploy"
-      },
-    ]
-  })
-  role = aws_iam_role.gha_ci.id
+  name   = "assume-deploy-roles"
+  policy = symbols::iam::assume_role_policy("arn:aws:iam::*:role/tmhs-deploy")
+  role   = aws_iam_role.gha_ci.id
 }

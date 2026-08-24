@@ -83,14 +83,9 @@ generate_hcl "_tmgen-deploy-role.tf" {
 
     resource "aws_iam_role" "deploy" {
       name = "${let.prefix}-deploy"
-      assume_role_policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect    = "Allow"
-          Principal = { AWS = local.deploy_trust }
-          Action    = "sts:AssumeRole"
-        }]
-      })
+      # local.deploy_trust is a runtime local (data.aws_caller_identity) — passed
+      # to the symbol verbatim; the action is a generate-time literal.
+      assume_role_policy = tm_hcl_expression("symbols::iam::aws_principal_trust(local.deploy_trust, ${tm_jsonencode("sts:AssumeRole")})")
     }
 
     # IAM propagation gate: poll sts:AssumeRole (the exact op the next tier does)
@@ -135,15 +130,8 @@ generate_hcl "_tmgen-deploy-role.tf" {
   }
   content {
     resource "aws_iam_role" "deploy" {
-      name = "${let.prefix}-deploy"
-      assume_role_policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect    = "Allow"
-          Principal = { AWS = let.trust_principals }
-          Action    = "sts:AssumeRole"
-        }]
-      })
+      name               = "${let.prefix}-deploy"
+      assume_role_policy = tm_hcl_expression("symbols::iam::aws_principal_trust(${tm_jsonencode(let.trust_principals)}, ${tm_jsonencode("sts:AssumeRole")})")
     }
   }
 }
@@ -165,30 +153,14 @@ generate_hcl "_tmgen-oidc-entry.tf" {
     }
     resource "aws_iam_role" "gha_ci" {
       name = "${let.prefix}-gha-ci"
-      assume_role_policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect    = "Allow"
-          Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
-          Action    = "sts:AssumeRoleWithWebIdentity"
-          Condition = {
-            StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-            StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:${component.input.github_repo.value}:*" }
-          }
-        }]
-      })
+      # Federated principal is a runtime resource ARN — passed to the symbol
+      # verbatim; the repo scope is a generate-time literal.
+      assume_role_policy = tm_hcl_expression("symbols::iam::github_oidc_trust(aws_iam_openid_connect_provider.github.arn, ${tm_jsonencode(component.input.github_repo.value)})")
     }
     resource "aws_iam_role_policy" "gha_ci_assume" {
-      name = "assume-deploy-roles"
-      role = aws_iam_role.gha_ci.id
-      policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect   = "Allow"
-          Action   = "sts:AssumeRole"
-          Resource = "arn:aws:iam::*:role/${let.prefix}-deploy"
-        }]
-      })
+      name   = "assume-deploy-roles"
+      role   = aws_iam_role.gha_ci.id
+      policy = tm_hcl_expression("symbols::iam::assume_role_policy(${tm_jsonencode("arn:aws:iam::*:role/${let.prefix}-deploy")})")
     }
   }
 }

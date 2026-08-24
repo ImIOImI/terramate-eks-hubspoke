@@ -13,15 +13,8 @@ generate_hcl "_tmgen-core-addons.tf" {
     }
 
     resource "aws_iam_role" "ebs_csi" {
-      name = "${let.prefix}-ebs-csi-${component.input.env.value}"
-      assume_role_policy = jsonencode({
-        Version = "2012-10-17"
-        Statement = [{
-          Effect    = "Allow"
-          Principal = { Service = "pods.eks.amazonaws.com" }
-          Action    = ["sts:AssumeRole", "sts:TagSession"]
-        }]
-      })
+      name               = "${let.prefix}-ebs-csi-${component.input.env.value}"
+      assume_role_policy = tm_hcl_expression("symbols::iam::pod_identity_trust()")
     }
 
     resource "aws_iam_role_policy_attachment" "ebs_csi" {
