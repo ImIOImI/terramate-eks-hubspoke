@@ -126,6 +126,18 @@ function "cluster_name" {
   return = "${symbols::project_prefix()}-eks-${param.id}"
 }
 
+# --- hub helpers: give a spoke's env id, get its HUB's value -----------------
+# So roots pass only their own env instead of nesting hub_env() everywhere.
+function "hub_cluster_name" {
+  parameter "id" { type = string }
+  return = symbols::cluster_name(symbols::hub_env(param.id))
+}
+function "hub_remote_state" {
+  parameter "id" { type = string }
+  parameter "tier" { type = string }
+  return = symbols::remote_state(symbols::hub_env(param.id), param.tier)
+}
+
 # --- global (non-per-env) knobs ---------------------------------------------
 function "github_repo" {
   return = "ImIOImI/terramate-eks-hubspoke"

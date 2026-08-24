@@ -21,3 +21,13 @@ function "spoke_access_arn" {
   parameter "env" { type = string }
   return = "arn:aws:iam::${symbols::config::account_id(param.env)}:role/${symbols::config::project_prefix()}-argocd-spoke-access"
 }
+
+# --- hub helpers: give a spoke's env id, get its HUB's ARN -------------------
+function "hub_deploy_role_arn" {
+  parameter "id" { type = string }
+  return = symbols::deploy_role_arn(symbols::config::hub_env(param.id))
+}
+function "hub_controller_arn" {
+  parameter "id" { type = string }
+  return = symbols::argocd_controller_arn(symbols::config::hub_env(param.id))
+}
