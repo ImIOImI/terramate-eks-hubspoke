@@ -70,10 +70,12 @@ Run against a symbols-capable build (`tofu` nightly ≥ `20260825`, or built fro
 
 ## CI
 
-`.github/actions/setup` installs the OpenTofu nightly from
-`nightlies.opentofu.org` (pinned via `tofu_nightly_date`, default `20260825`,
-guarded to reject anything older) instead of `opentofu/setup-opentofu`, because
-symbols are not in any stable release yet. `tflint`/`tofu fmt` are unaffected —
+`.github/actions/setup` **builds `tofu` from source** at the commit that merged
+the experiment (`opentofu_ref`, default `5097d2de`), because symbols are not in
+any stable release or published nightly yet (nightlies from `20260825` onward
+will carry it). The build is cached across runs (`~/.cache/go-build`,
+`~/go/pkg/mod`, the binary), so only the first run pays for it. Swap `opentofu_ref`
+to a nightly/release once symbols stabilize. `tflint`/`tofu fmt` are unaffected —
 tflint ignores the unknown top-level blocks and does not scan `.sym.hcl`.
 
 ## Caveat
