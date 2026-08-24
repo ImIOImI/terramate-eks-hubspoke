@@ -1,0 +1,39 @@
+name: native-symbols
+
+# Verifies the no-Terramate, symbols-DRY exploration (lib/ + modules/ + envs/).
+# Builds a symbols-capable tofu (via ./.github/actions/setup) and fmt-checks +
+# validates every root in the native tree. See docs/superpowers/specs for the
+# design; this is a spike gated on the symbol_libraries experiment.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "modules/**"
+      - "envs/**"
+      - ".github/workflows/native-symbols.yml"
+      - ".github/actions/setup/**"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: tofu fmt (native tree)
+        run: tofu fmt -check -recursive lib modules envs
+
+      - name: tofu validate (every env root)
+        # Each root is a separate module dir with its own backend; -backend=false
+        # lets validate run without S3/credentials. terraform_remote_state config
+        # is supplied by symbols::cfg::remote_state and parses without resolving.
+        run: |
+          set -euo pipefail
+          for root in envs/*/*; do
+            echo "== $root =="
+            ( cd "$root" && tofu init -backend=false -no-color >/dev/null && tofu validate -no-color )
+          done
