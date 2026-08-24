@@ -26,7 +26,7 @@ provider "aws" {
     role_arn = symbols::name::deploy_role_arn("dev")
   }
   default_tags {
-    tags = symbols::cfg::tags()
+    tags = symbols::cfg::tags("dev")
   }
 }
 
@@ -40,7 +40,7 @@ module "cluster" {
   source = "../../../modules/eks-cluster"
 
   cluster_name       = symbols::cfg::cluster_name("dev")
-  kubernetes_version = symbols::cfg::kubernetes_version()
+  kubernetes_version = symbols::cfg::kubernetes_version("dev")
   vpc_id             = data.terraform_remote_state.network.outputs.vpc_id
   private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
   deploy_role_arn    = symbols::name::deploy_role_arn("dev")

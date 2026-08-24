@@ -27,10 +27,11 @@ data "terraform_remote_state" "cluster" {
   config  = symbols::cfg::remote_state("dev", "cluster")
 }
 
-# Cross-ENV read: the hub cluster's state, so we can register into it.
+# Cross-ENV read: the hub cluster's state, so we can register into it. The hub
+# environment comes from config (dev's hub_env), not a hardcoded "infra".
 data "terraform_remote_state" "hub_cluster" {
   backend = "s3"
-  config  = symbols::cfg::remote_state("infra", "cluster")
+  config  = symbols::cfg::remote_state(symbols::cfg::hub_env("dev"), "cluster")
 }
 
 provider "aws" {
@@ -39,7 +40,7 @@ provider "aws" {
     role_arn = symbols::name::deploy_role_arn("dev")
   }
   default_tags {
-    tags = symbols::cfg::tags()
+    tags = symbols::cfg::tags("dev")
   }
 }
 
@@ -54,8 +55,8 @@ provider "kubernetes" {
     command     = "aws"
     args = [
       "eks", "get-token",
-      "--cluster-name", symbols::cfg::cluster_name("infra"),
-      "--role-arn", symbols::name::deploy_role_arn("infra"),
+      "--cluster-name", symbols::cfg::cluster_name(symbols::cfg::hub_env("dev")),
+      "--role-arn", symbols::name::deploy_role_arn(symbols::cfg::hub_env("dev")),
     ]
   }
 }
@@ -69,8 +70,8 @@ module "provisioning" {
 
   cluster_name     = symbols::cfg::cluster_name("dev")
   env              = "dev"
-  addon_versions   = symbols::cfg::addon_versions()
-  controller_arn   = symbols::name::argocd_controller_arn("infra")
+  addon_versions   = symbols::cfg::addon_versions("dev")
+  controller_arn   = symbols::name::argocd_controller_arn(symbols::cfg::hub_env("dev"))
   cluster_endpoint = data.terraform_remote_state.cluster.outputs.cluster_endpoint
   cluster_ca       = data.terraform_remote_state.cluster.outputs.cluster_ca
 }

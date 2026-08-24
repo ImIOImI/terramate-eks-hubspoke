@@ -34,6 +34,43 @@ Where symbols are used:
 - **Modules** import `net` + `iam` as internal helpers (subnet math; policy docs).
 - `naming` imports `config` (cross-library reference — verified working).
 
+## Config: defaults + per-env overrides via a pure deepmerge
+
+`config` holds the *entire* configuration as data: a `defaults()` base plus an
+`overrides()` map of only what each environment changes. `env(id)` deep-merges
+the two, and every other accessor (`account_id`, `region`, `node_scaling`,
+`addon_versions`, `hub_env`, …) derives from `env(id)` — so `prd` can widen its
+node group with a three-line override and nothing else changes.
+
+Symbols are pure and **cannot call the Terraform deepmerge module**, so the
+merge is a pure recursive symbol. This is not just a workaround — it's required:
+the merged config must live *inside* symbols so `naming`, state-addressing, and
+the roots can all derive from it. A module's output couldn't be reached from
+another symbol.
+
+```hcl
+function "env" {
+  parameter "id" { type = string }
+  return = symbols::deepmerge(symbols::defaults(), symbols::overrides()[param.id])
+}
+function "deepmerge" {           # over wins; two maps merge; else replace
+  parameter "base" { type = any }
+  parameter "over" { type = any }
+  return = { for k in distinct(concat(keys(param.base), keys(param.over))) : k => (
+    contains(keys(param.base), k) && contains(keys(param.over), k) && can(keys(param.base[k])) && can(keys(param.over[k]))
+    ? symbols::deepmerge(param.base[k], param.over[k])
+    : (contains(keys(param.over), k) ? param.over[k] : param.base[k])
+  ) }
+}
+```
+
+Verified: `env("prd")` yields `node_scaling = {min=3,max=6}` and
+`node_instance_types = ["m5.xlarge"]` (overrides) while inheriting every default;
+`env("dev")` keeps the defaults. **Recursion caveat:** direct symbol self-
+recursion is blocked by the compiler (`Recursive call detected`), but recursion
+*through a `for`-comprehension* — as in `deepmerge` — is permitted and verified
+to 3+ levels. A fixed 2-level merge is the fallback if that ever tightens.
+
 ## How remote-state wiring looks
 
 Symbols are **pure** — a symbol can't read state. It builds the *address*; the

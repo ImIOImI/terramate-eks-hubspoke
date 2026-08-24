@@ -31,7 +31,7 @@ terraform {
 provider "aws" {
   region = symbols::cfg::region("dev")
   default_tags {
-    tags = symbols::cfg::tags()
+    tags = symbols::cfg::tags("dev")
   }
 }
 

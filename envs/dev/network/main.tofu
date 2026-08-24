@@ -26,7 +26,7 @@ provider "aws" {
     role_arn = symbols::name::deploy_role_arn("dev")
   }
   default_tags {
-    tags = symbols::cfg::tags()
+    tags = symbols::cfg::tags("dev")
   }
 }
 
@@ -36,7 +36,7 @@ module "network" {
   cluster_name = symbols::cfg::cluster_name("dev")
   region       = symbols::cfg::region("dev")
   vpc_cidr     = symbols::cfg::vpc_cidr("dev")
-  tags         = symbols::cfg::tags()
+  tags         = symbols::cfg::tags("dev")
 }
 
 output "vpc_id" { value = module.network.vpc_id }

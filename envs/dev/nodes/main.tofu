@@ -26,7 +26,7 @@ provider "aws" {
     role_arn = symbols::name::deploy_role_arn("dev")
   }
   default_tags {
-    tags = symbols::cfg::tags()
+    tags = symbols::cfg::tags("dev")
   }
 }
 
@@ -43,10 +43,10 @@ module "nodes" {
   source = "../../../modules/eks-nodes"
 
   cluster_name         = symbols::cfg::cluster_name("dev")
-  kubernetes_version   = symbols::cfg::kubernetes_version()
+  kubernetes_version   = symbols::cfg::kubernetes_version("dev")
   private_subnet_ids   = data.terraform_remote_state.network.outputs.private_subnet_ids
   cluster_service_cidr = data.terraform_remote_state.cluster.outputs.cluster_service_cidr
-  node_instance_types  = symbols::cfg::node_instance_types()
-  node_scaling         = symbols::cfg::node_scaling()
-  addon_versions       = symbols::cfg::addon_versions()
+  node_instance_types  = symbols::cfg::node_instance_types("dev")
+  node_scaling         = symbols::cfg::node_scaling("dev")
+  addon_versions       = symbols::cfg::addon_versions("dev")
 }
