@@ -1,7 +1,7 @@
 # config — the entire configuration as data, with per-environment overrides.
 #
-# defaults() holds the base config shared by every environment. overrides()
-# holds only what each environment changes. env(id) deep-merges the two, so a
+# The `defaults` and `overrides` values hold the base config and the per-env
+# deltas. env(id) deep-merges the two, so a
 # consumer asks for the fully-resolved config of one environment and never sees
 # the base/override split. Everything env-specific (naming, state addressing)
 # derives from env(id), so the whole library stays consistent.
@@ -14,9 +14,12 @@ function "project_prefix" {
   return = "tmhs"
 }
 
-# Base config. Any key here can be overridden per environment.
-function "defaults" {
-  return = {
+# Base config + per-environment overrides as `values` (parameterless constants,
+# not functions): `defaults` is the base shared by every environment,
+# `overrides` carries only the per-env deltas. Referenced as value.defaults /
+# value.overrides from env() below.
+values {
+  defaults = {
     region              = "us-east-1"
     role                = "spoke"
     hub_env             = "infra"
@@ -35,11 +38,9 @@ function "defaults" {
       ManagedBy = "opentofu"
     }
   }
-}
 
-# Per-environment overrides — only what differs from defaults().
-function "overrides" {
-  return = {
+  # Per-environment overrides — only what differs from defaults.
+  overrides = {
     infra = {
       account_id = "111111111111"
       vpc_cidr   = "10.0.0.0/16"
@@ -77,7 +78,7 @@ function "deepmerge" {
 # The fully-resolved config for one environment.
 function "env" {
   parameter "id" { type = string }
-  return = symbols::deepmerge(symbols::defaults(), symbols::overrides()[param.id])
+  return = symbols::deepmerge(value.defaults, value.overrides[param.id])
 }
 
 # --- typed accessors (all derive from the merged env) ------------------------
