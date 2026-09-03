@@ -31,9 +31,11 @@ variable "cluster_ca" { type = string }
 
 # ---- core add-ons (both roles) ----
 resource "aws_eks_addon" "coredns" {
-  cluster_name  = var.cluster_name
-  addon_name    = "coredns"
-  addon_version = var.addon_versions["coredns"]
+  cluster_name                = var.cluster_name
+  addon_name                  = "coredns"
+  addon_version               = var.addon_versions["coredns"]
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
 }
 resource "aws_iam_role" "ebs_csi" {
   name               = "tmhs-ebs-csi-${var.env}"

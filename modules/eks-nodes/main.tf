@@ -21,15 +21,19 @@ variable "addon_versions" { type = map(string) }
 
 # CNI add-ons first (control-plane only), then nodes, then pod-identity.
 resource "aws_eks_addon" "kube_proxy" {
-  cluster_name  = var.cluster_name
-  addon_name    = "kube-proxy"
-  addon_version = var.addon_versions["kube-proxy"]
+  cluster_name                = var.cluster_name
+  addon_name                  = "kube-proxy"
+  addon_version               = var.addon_versions["kube-proxy"]
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
 }
 
 resource "aws_eks_addon" "vpc_cni" {
-  cluster_name  = var.cluster_name
-  addon_name    = "vpc-cni"
-  addon_version = var.addon_versions["vpc-cni"]
+  cluster_name                = var.cluster_name
+  addon_name                  = "vpc-cni"
+  addon_version               = var.addon_versions["vpc-cni"]
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
 }
 
 module "nodes" {
