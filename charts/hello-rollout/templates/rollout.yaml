@@ -17,6 +17,12 @@ spec:
         app.kubernetes.io/name: hello-rollout
         env: {{ .Values.env | quote }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: rollouts-demo
           image: argoproj/rollouts-demo:{{ .Values.color }}
@@ -26,6 +32,17 @@ spec:
             httpGet:
               path: /
               port: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
   strategy:
     canary:
       steps:
