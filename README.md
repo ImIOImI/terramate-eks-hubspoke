@@ -97,8 +97,8 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 
 | Tool | Version | Notes |
 |---|---|---|
-| OpenTofu | `1.11.5` | Use [tenv](https://github.com/tofuutils/tenv) — it reads the generated `.opentofu-version` |
-| Terramate | `>=0.17.1` (GA) | **Not** Catalyst. See install options below. |
+| OpenTofu | `1.13.9` | Use [tenv](https://github.com/tofuutils/tenv) — it reads the generated `.opentofu-version`. Tested 1.6.0–1.13.9 ([TOOLCHAIN](docs/TOOLCHAIN.md)) |
+| Terramate | `>=0.17.0, <0.18.0` (GA), CI uses `0.17.4` | **Not** Catalyst. See install options below. |
 | AWS CLI | Any recent | `aws configure` or environment creds |
 | `tflint` | `>=0.63.0` | Optional locally; required by CI |
 | `trivy` | Any recent | Optional locally; required by CI |
@@ -107,16 +107,16 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 
 ```bash
 # Option A — tenv (recommended; same as CI)
-tenv terramate install 0.17.1 && tenv terramate use 0.17.1
+tenv terramate install 0.17.4 && tenv terramate use 0.17.4
 
 # Option B — tarball (x86_64 Linux)
-VER=0.17.1
+VER=0.17.4
 curl -fsSL -o /tmp/terramate.tar.gz \
   https://github.com/terramate-io/terramate/releases/download/v${VER}/terramate_${VER}_linux_x86_64.tar.gz
 tar -xzf /tmp/terramate.tar.gz -C /usr/local/bin terramate
 
 # Option C — .deb (Ubuntu/Debian CI runners)
-VER=0.17.1
+VER=0.17.4
 curl -fsSL -o /tmp/terramate.deb \
   https://github.com/terramate-io/terramate/releases/download/v${VER}/terramate_${VER}_linux_amd64.deb
 sudo dpkg -i /tmp/terramate.deb
