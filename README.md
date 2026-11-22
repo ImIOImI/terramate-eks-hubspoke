@@ -57,7 +57,7 @@ with per-environment input overrides.  The `stacks/` directory is the generated 
 ```text
 _scaffold-cluster.tm.yml ─── eks-cluster bundle ──► stacks/aws/<env>/bootstrap
                                                 ──► stacks/aws/<env>/eks/{network,cluster,nodes,provisioning}
-                                                    (for env in infra, dev, prd, ci-hub)
+                                                    (for env in infra, dev, prd, ci-hub, ci-dev, ci-prd)
 ```
 
 Within each cluster, stacks run in dependency order automatically:
@@ -85,7 +85,7 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 | Scaffold | repo root | `_scaffold-cluster.tm.yml` — the only hand-written instance layer |
 | Stacks | `stacks/aws/{infra,dev,prd}/` | Generated; never edit |
 | CI | `.github/workflows/` | `preview.yml` (PR), `deploy.yml` (merge to main) |
-| Local `ci-hub` env | `MINISTACK.md` | Running the whole chain on [MiniStack](https://ministack.org) with no AWS account |
+| Local `ci-hub` / `ci-dev` / `ci-prd` envs | `MINISTACK.md` | A hub + two spokes on [MiniStack](https://ministack.org) with no AWS account; ArgoCD deploys hello-world + Argo Rollouts demos to both spokes |
 | Bootstrapping | `BOOTSTRAPPING.md` | First-run order: why bootstrap precedes the cluster stacks, derived stack ids |
 | Make helpers | `make/` | `stack-ids.sh` (derive ids from scaffolds + bundles), `create-stacks.sh` (`make stacks`) |
 | Design | `docs/design.md` | Architecture decisions, layer diagram, pinning table |
@@ -122,9 +122,10 @@ curl -fsSL -o /tmp/terramate.deb \
 sudo dpkg -i /tmp/terramate.deb
 ```
 
-> **No AWS account?** `make ci-hub-apply` runs the entire chain — including a real
-> ArgoCD install — against [MiniStack](https://ministack.org) locally. See
-> [MINISTACK.md](MINISTACK.md).
+> **No AWS account?** `make ci-apply` runs the entire chain for a hub and two spokes
+> against [MiniStack](https://ministack.org) locally: a real ArgoCD on the hub
+> deploys hello-world and an Argo Rollouts canary to both spokes, then the run prints
+> the hub's ArgoCD URL and login. See [MINISTACK.md](MINISTACK.md).
 
 **AWS accounts:** you need three AWS accounts: one for `infra` (hub + CI OIDC entry),
 one for `dev`, one for `prd`.  If you only have one account, set the same account ID in
