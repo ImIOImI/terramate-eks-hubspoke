@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Extract the k3s admin client cert/key/CA that MiniStack's EKS emulation creates,
-# into .ministack/<cluster>.{crt,key,ca}.
+# into .ministack/<cluster>.{crt,key,ca}, plus its Docker bridge IP (.ip).
 #
 # Why: `aws eks get-token` returns a well-formed ExecCredential but MiniStack's
 # k3s has no aws-iam-authenticator webhook in front of it and answers 401. The
 # k3s admin client certificate is the only way in, so the kubernetes/helm
 # providers read these files for local envs (components/providers/kubernetes).
 #
-# Run after the cluster stack applies, before the provisioning stack (ci-hub, or
-# a future ci-spoke — pass that cluster's name).
+# Run after the cluster stack applies, before nodes/provisioning (the `deploy`
+# script does this for every local cluster stack).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -39,5 +39,9 @@ open(f".ministack/{cluster}.ca", "wb").write(
     base64.b64decode(cfg["clusters"][0]["cluster"]["certificate-authority-data"]))
 PY
 
+# The container's bridge IP: how OTHER containers (the hub's ArgoCD, the UI
+# proxy) reach this cluster. localhost:<port> only works from the host.
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$container" > .ministack/"$cluster".ip
+
 chmod 600 .ministack/"$cluster".key
-echo "wrote .ministack/${cluster}.{crt,key,ca} from $container"
+echo "wrote .ministack/${cluster}.{crt,key,ca,ip} from $container"

@@ -1,0 +1,9 @@
+# What the hub ArgoCD manages from git (app-of-apps). Tofu installs ArgoCD and
+# ONE root Application pointing here (argocd-hub component, demo_apps = true);
+# everything below is reconciled by ArgoCD itself.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: argocd
+resources:
+  - argo-rollouts.yaml
+  - hello.yaml

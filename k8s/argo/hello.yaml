@@ -1,0 +1,38 @@
+# The hello apps (k8s/kustomize) on every spoke that declares an overlay. The
+# overlay comes from the spoke's cluster-secret label, so ci-dev gets
+# k8s/kustomize/dev and ci-prd gets k8s/kustomize/prd.
+#
+# targetRevision: the root Application overrides it to the revision tofu was
+# given (var.demo_apps_revision) for every ApplicationSet labelled
+# tmhs.io/revision=root, so a pushed branch can be tested end to end.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: hello
+  labels:
+    tmhs.io/revision: root
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchExpressions:
+            - { key: overlay, operator: Exists }
+  template:
+    metadata:
+      name: "hello-{{name}}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/ImIOImI/terramate-eks-hubspoke.git
+        targetRevision: main
+        path: "k8s/kustomize/{{metadata.labels.overlay}}"
+      destination:
+        server: "{{server}}"
+        namespace: hello
+      syncPolicy:
+        automated: { prune: true, selfHeal: true }
+        retry:
+          limit: 10
+          backoff: { duration: 10s, factor: 2, maxDuration: 3m }
+        # The Rollout's CRD arrives with argo-rollouts (a sibling app); retry until it exists.
+        syncOptions: [CreateNamespace=true, SkipDryRunOnMissingResource=true]

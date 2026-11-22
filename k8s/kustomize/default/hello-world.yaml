@@ -1,0 +1,56 @@
+# Plain Deployment: proves the hub can sync + health-check a workload on a spoke.
+# traefik/whoami answers with its hostname, IP and request headers.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world
+  labels:
+    app.kubernetes.io/name: hello-world
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hello-world
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hello-world
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hello
+          image: traefik/whoami:v1.10.3
+          args: ["--port", "8080", "--name", "default"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-world
+spec:
+  selector:
+    app.kubernetes.io/name: hello-world
+  ports:
+    - port: 80
+      targetPort: 8080

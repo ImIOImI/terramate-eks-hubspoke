@@ -23,7 +23,8 @@ generate_hcl "_tmgen-argocd-spoke.tf" {
   # Conditional components are unsupported (SPIKE-FINDINGS: no ternary source, no
   # tm_dynamic "component"), so this component is always instantiated but emits
   # nothing unless enabled (bundle sets enabled = role=="spoke").
-  condition = component.input.enabled.value
+  # Real AWS only; the local (MiniStack) variant is at the bottom of this file.
+  condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint == ""
   lets {
     prefix = component.input.project_prefix.value
     # hub account map entry — used to construct the controller role ARN.
@@ -95,6 +96,103 @@ generate_hcl "_tmgen-argocd-spoke.tf" {
             caData = var.cluster_ca
           }
         })
+      }
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Local (MiniStack) variant.
+#
+# Two things differ from the real registration above:
+#   - auth: awsAuthConfig makes ArgoCD fetch an EKS token, which MiniStack's
+#     k3s answers with 401. Local spokes register with the k3s admin client
+#     certificate instead (tlsClientConfig cert/key/CA from .ministack/).
+#   - server: MiniStack reports the endpoint as https://localhost:<port>, which
+#     only resolves on your laptop. The hub's ArgoCD runs inside another
+#     container, so it dials the spoke's k3s container IP (.ministack/<cluster>.ip,
+#     on Docker's bridge network; the k3s serving cert includes that IP).
+#
+# The spoke-access IAM role is kept so the IAM side is still exercised, even
+# though nothing assumes it locally.
+# ---------------------------------------------------------------------------
+generate_hcl "_tmgen-argocd-spoke.tf" {
+  condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint != ""
+  lets {
+    prefix    = component.input.project_prefix.value
+    hub       = tm_try(component.input.account_map.value[component.input.hub_env.value], {})
+    ministack = "${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}"
+  }
+  content {
+    resource "aws_iam_role" "spoke_access" {
+      name = "${let.prefix}-argocd-spoke-access"
+      assume_role_policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+          Effect = "Allow"
+          Principal = {
+            AWS = "arn:aws:iam::${let.hub.account_id}:role/${let.prefix}-argocd-controller"
+          }
+          Action = ["sts:AssumeRole", "sts:TagSession"]
+        }]
+      })
+    }
+
+    resource "kubernetes_secret" "registration" {
+      provider = kubernetes.hub
+
+      metadata {
+        name      = "cluster-${component.input.cluster_name.value}"
+        namespace = "argocd"
+        labels = {
+          "argocd.argoproj.io/secret-type" = "cluster"
+          "env"                            = component.input.env.value
+          "overlay"                        = component.input.k8s_overlay.value
+        }
+      }
+
+      data = {
+        name   = component.input.cluster_name.value
+        server = "https://${trimspace(file("${let.ministack}.ip"))}:6443"
+        config = jsonencode({
+          tlsClientConfig = {
+            caData   = filebase64("${let.ministack}.ca")
+            certData = filebase64("${let.ministack}.crt")
+            keyData  = filebase64("${let.ministack}.key")
+          }
+        })
+      }
+    }
+  }
+}
+
+# `terramate script run ci test` -- generated only into local spoke provisioning
+# stacks. Waits (on the hub) for this spoke's two demo Applications to be
+# Synced + Healthy, then lists what actually landed on the spoke's own k3s.
+generate_hcl "_tmgen-ci-test-script.tm.hcl" {
+  condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint != ""
+  lets {
+    hub_k3s   = "ministack-eks-${tm_try(component.input.account_map.value[component.input.hub_env.value].region, "")}-${tm_try(component.input.account_map.value[component.input.hub_env.value].cluster_name, "")}"
+    spoke_k3s = "ministack-eks-${component.input.account_map.value[component.input.env.value].region}-${component.input.cluster_name.value}"
+    apps = [
+      "application/argo-rollouts-${component.input.cluster_name.value}",
+      "application/hello-${component.input.cluster_name.value}",
+    ]
+  }
+  content {
+    script "ci" "test" {
+      description = "Wait for the hub to sync + heal this spoke's demo apps, then show them on the spoke"
+      job {
+        commands = [
+          # One create-wait per app: a multi-resource wait fails fast on NotFound.
+          # 6m covers the ApplicationSet controller's 3m retry when a spoke's
+          # cluster secret lands while it is mid-reconcile.
+          ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[0]],
+          ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[1]],
+          tm_concat(["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=jsonpath={.status.sync.status}=Synced", "--timeout=10m"], let.apps),
+          tm_concat(["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=jsonpath={.status.health.status}=Healthy", "--timeout=10m"], let.apps),
+          ["docker", "exec", let.spoke_k3s, "kubectl", "get", "deploy,rollouts.argoproj.io,pods", "-n", "hello", "-L", "overlay", "-o", "wide"],
+        ]
       }
     }
   }

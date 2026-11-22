@@ -11,6 +11,9 @@ Terramate 0.17.1 / OpenTofu 1.11.5 / AWS 6.54.0 (6.60.0 in the `ci-hub` locks).
 The other providers (kubernetes, helm, tls, cloudinit, null, time) were left at
 their locked versions.
 
+`kreuzwerker/docker` (`~> 4.7`, locked `4.7.0`) is used only by the local
+`ci-hub` provisioning stack, for the ArgoCD UI proxy (see MINISTACK.md).
+
 ## Results
 
 `validate` = generation byte-identical + `tofu validate` on every non-local stack.

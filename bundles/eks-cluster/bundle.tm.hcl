@@ -60,6 +60,26 @@ define "bundle" {
     description = "list of spoke environment ids the hub ArgoCD controller may assume into (hub only)"
     default     = ["dev", "prd"]
   }
+  input "stack_group" {
+    type        = string
+    description = "top-level folder under stacks/ this env's stacks live in: aws (real accounts) or ci (local MiniStack envs). Not part of the stack id; `after` edges use tags, so moving an env between groups changes no ordering."
+    default     = "aws"
+  }
+  input "demo_apps" {
+    type        = bool
+    description = "hub only: root Application for k8s/argo (Argo Rollouts + k8s/kustomize hello apps on every registered spoke)"
+    default     = false
+  }
+  input "k8s_overlay" {
+    type        = string
+    description = "spoke only: which k8s/kustomize overlay the hub deploys here (labels the cluster secret); empty = the env id"
+    default     = ""
+  }
+  input "argocd_apps_chart_version" {
+    type        = string
+    description = "argocd-apps Helm chart version used to declare the demo ApplicationSets"
+    default     = "2.0.8"
+  }
   input "vpc_cidr" {
     type        = string
     description = "CIDR block for this env's VPC"
@@ -100,7 +120,7 @@ define "bundle" {
   # and Terramate only mints a UUID when that file is absent. So the same formula
   # reproduces them below and no wiring input is needed.
   #
-  #   /stacks/aws/<env>/eks/<label>  ->  <env>-eks-<label>
+  #   /stacks/<stack_group>/<env>/eks/<label>  ->  <env>-eks-<label>
   #
   # Keep these two expressions and make/stack-ids.sh's id_for() in agreement --
   # `make check-ids` fails the build if they ever drift.
@@ -116,7 +136,7 @@ define "bundle" {
 # ============================================================================
 define bundle stack "network" {
   metadata {
-    path        = "/stacks/aws/${bundle.environment.id}/eks/network"
+    path        = "/stacks/${bundle.input.stack_group.value}/${bundle.environment.id}/eks/network"
     name        = "eks-network-${bundle.environment.id}"
     description = "VPC + subnets for ${bundle.environment.id}"
     tags = tm_concat(
@@ -128,7 +148,7 @@ define bundle stack "network" {
     # creates, so `tofu init` fails until it exists. cluster/nodes/provisioning
     # inherit the edge transitively through network. Conditional: on the adopt path
     # (deploy_role_arn set) there is no bootstrap stack, so the edge is omitted.
-    after = bundle.input.deploy_role_arn.value == "" ? ["/stacks/aws/${bundle.environment.id}/bootstrap"] : []
+    after = bundle.input.deploy_role_arn.value == "" ? ["tag:env-${bundle.environment.id}:bootstrap"] : []
   }
 
   component "network" {
@@ -171,14 +191,14 @@ define bundle stack "network" {
 # ============================================================================
 define bundle stack "cluster" {
   metadata {
-    path        = "/stacks/aws/${bundle.environment.id}/eks/cluster"
+    path        = "/stacks/${bundle.input.stack_group.value}/${bundle.environment.id}/eks/cluster"
     name        = "eks-cluster-${bundle.environment.id}"
     description = "EKS control plane for ${bundle.environment.id}"
     tags = tm_concat(
       ["eks", "cluster", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"],
       bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
     )
-    after = ["/stacks/aws/${bundle.environment.id}/eks/network"]
+    after = ["tag:env-${bundle.environment.id}:network"]
   }
 
   component "cluster" {
@@ -226,14 +246,14 @@ define bundle stack "cluster" {
 # ============================================================================
 define bundle stack "nodes" {
   metadata {
-    path        = "/stacks/aws/${bundle.environment.id}/eks/nodes"
+    path        = "/stacks/${bundle.input.stack_group.value}/${bundle.environment.id}/eks/nodes"
     name        = "eks-nodes-${bundle.environment.id}"
     description = "Managed node group for ${bundle.environment.id}"
     tags = tm_concat(
       ["eks", "nodes", "env-${bundle.environment.id}", "role-${bundle.input.role.value}"],
       bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
     )
-    after = ["/stacks/aws/${bundle.environment.id}/eks/cluster"]
+    after = ["tag:env-${bundle.environment.id}:cluster"]
   }
 
   component "nodes" {
@@ -283,7 +303,7 @@ define bundle stack "nodes" {
 # ============================================================================
 define bundle stack "provisioning" {
   metadata {
-    path        = "/stacks/aws/${bundle.environment.id}/eks/provisioning"
+    path        = "/stacks/${bundle.input.stack_group.value}/${bundle.environment.id}/eks/provisioning"
     name        = "eks-provisioning-${bundle.environment.id}"
     description = "Core add-ons + ArgoCD (${bundle.input.role.value}) for ${bundle.environment.id}"
     tags = tm_concat(
@@ -291,8 +311,8 @@ define bundle stack "provisioning" {
       bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? ["local"] : [],
     )
     after = tm_concat(
-      ["/stacks/aws/${bundle.environment.id}/eks/nodes"],
-      bundle.input.role.value == "spoke" ? ["/stacks/aws/${bundle.input.hub_env.value}/eks/provisioning"] : [],
+      ["tag:env-${bundle.environment.id}:nodes"],
+      bundle.input.role.value == "spoke" ? ["tag:env-${bundle.input.hub_env.value}:provisioning"] : [],
     )
   }
 
@@ -319,6 +339,10 @@ define bundle stack "provisioning" {
       project_prefix       = bundle.input.project_prefix.value
       argocd_chart_version = bundle.input.argocd_chart_version.value
       spoke_envs           = bundle.input.spoke_envs.value
+
+      demo_apps                 = bundle.input.demo_apps.value
+      demo_apps_repo            = "https://github.com/${bundle.input.github_repo.value}.git"
+      argocd_apps_chart_version = bundle.input.argocd_apps_chart_version.value
     }
   }
 
@@ -333,6 +357,7 @@ define bundle stack "provisioning" {
       account_map      = bundle.input.aws_account_map.value
       project_prefix   = bundle.input.project_prefix.value
       cluster_stack_id = "${bundle.environment.id}-eks-cluster"
+      k8s_overlay      = bundle.input.k8s_overlay.value != "" ? bundle.input.k8s_overlay.value : bundle.environment.id
     }
   }
 
@@ -354,12 +379,15 @@ define bundle stack "provisioning" {
   component "required" {
     source = "/components/providers/required"
     inputs {
-      # aws + kubernetes always; helm on the hub (where the ArgoCD Helm release lives).
-      providers = bundle.input.role.value == "hub" ? {
+      # aws + kubernetes always; helm on the hub (where the ArgoCD Helm release lives);
+      # docker on a local hub (the ArgoCD UI proxy container, argocd-hub component).
+      providers = bundle.input.role.value == "hub" ? tm_merge({
         aws        = bundle.input.providers_map.value.aws
         kubernetes = bundle.input.providers_map.value.kubernetes
         helm       = bundle.input.providers_map.value.helm
-        } : {
+        }, bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? {
+        docker = bundle.input.providers_map.value.docker
+        } : {}) : {
         aws        = bundle.input.providers_map.value.aws
         kubernetes = bundle.input.providers_map.value.kubernetes
       }
@@ -394,7 +422,7 @@ define bundle stack "provisioning" {
 define bundle stack "bootstrap" {
   condition = bundle.input.deploy_role_arn.value == ""
   metadata {
-    path        = "/stacks/aws/${bundle.environment.id}/bootstrap"
+    path        = "/stacks/${bundle.input.stack_group.value}/${bundle.environment.id}/bootstrap"
     name        = "bootstrap-${bundle.environment.id}"
     description = "Account foundation for ${bundle.environment.id}"
     # 'oidc-entry' marks the one account that owns the OIDC provider + gha-ci role.
@@ -406,7 +434,7 @@ define bundle stack "bootstrap" {
     # Every non-entry account's tmhs-deploy trusts arn:...:<oidc_entry_env>:role/tmhs-gha-ci.
     # IAM rejects a trust policy naming a principal that does not exist, so the
     # OIDC-entry account's bootstrap must be applied first.
-    after = bundle.input.oidc_entry.value ? [] : ["/stacks/aws/${bundle.input.oidc_entry_env.value}/bootstrap"]
+    after = bundle.input.oidc_entry.value ? [] : ["tag:env-${bundle.input.oidc_entry_env.value}:bootstrap"]
   }
 
   component "bootstrap" {

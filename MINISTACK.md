@@ -1,41 +1,125 @@
-# The `ci-hub` environment (MiniStack)
+# Local hub + spokes on MiniStack (`ci-hub`, `ci-dev`, `ci-prd`)
 
-`ci-hub` is a fourth environment that runs the entire stack chain — bootstrap →
-network → cluster → nodes → provisioning — against
-[MiniStack](https://ministack.org) on your laptop. No AWS account, no cost. It
-plays the hub role (ArgoCD); a future `ci-spoke` would register against it inside
-the same MiniStack fabric.
+Three local environments mirror the real `infra` → `dev` / `prd` topology on
+[MiniStack](https://ministack.org): `ci-hub` runs ArgoCD, and `ci-dev` and `ci-prd`
+register with it as spokes. No AWS account, no cost.
 
 ```bash
-make ci-hub-apply # ~3 minutes from cold
+make ci-apply     # ~15 min from cold: all three envs, demo apps, test, then prints the ArgoCD URL
 make ci-down      # remove the whole local fabric
 ```
 
-It is a real end-to-end run, not a plan: MiniStack's `eks:CreateCluster` starts a
-**real k3s container**, and the provisioning stack installs ArgoCD into it via
-Helm. All seven ArgoCD pods come up `Running`.
+It is a real end-to-end run, not a plan. MiniStack's `eks:CreateCluster` starts a
+**real k3s container** per cluster. The hub's provisioning stack installs ArgoCD
+with Helm, each spoke's provisioning stack registers the spoke with that ArgoCD,
+and the hub then deploys the demo apps to both spokes **through ArgoCD itself**.
+
+At the end `make ci-apply` prints:
+
+```text
+ArgoCD hub (ci-hub): https://localhost:8443   (self-signed certificate)
+  user:     admin
+  password: <generated>
+```
+
+Open it to see both spoke clusters, the root `k8s-argo` app, and the four apps it
+fans out to the spokes. `make ci-argo` prints it again at any time.
+
+Where the local stacks live, and why their auth differs from the real ones:
+[`stacks/ci/README.md`](stacks/ci/README.md).
+
+---
+
+## What gets deployed to every spoke
+
+`ci-hub` sets `demo_apps: true` in `_scaffold-cluster.tm.yml`. Tofu then installs one
+**root Application** pointing ArgoCD at [`k8s/argo`](k8s/argo) (app-of-apps), and
+ArgoCD manages the rest from git:
+
+| ApplicationSet (`k8s/argo/`) | Deploys | Proves |
+|---|---|---|
+| `argo-rollouts` | argo-helm `argo-rollouts` chart, to every spoke | the hub can install a controller + CRDs on a spoke |
+| `hello` | [`k8s/kustomize/<overlay>`](k8s/kustomize): a `hello-world` Deployment (`traefik/whoami`) + a canary `hello-rollout` (`argoproj/rollouts-demo`) | sync + health across clusters, per-spoke overlays, Argo Rollouts progressive delivery (50% → pause → 100%) |
+
+Each spoke gets its own overlay, chosen by the `overlay` label on its cluster
+secret (`k8s_overlay` in the scaffold): `ci-dev` → `k8s/kustomize/dev` (1 / 2
+replicas, blue, 10 s canary pause), `ci-prd` → `k8s/kustomize/prd` (2 / 3, green,
+30 s). See [`k8s/README.md`](k8s/README.md).
+
+`make ci-test` (part of `make ci-apply`) waits, on the hub, for each spoke's two
+Applications to be **Synced** and **Healthy**, then lists what actually landed on
+that spoke's own k3s, with its overlay.
+
+**Manifests come from git, not your working tree.** ArgoCD clones this repo, at
+`main` by default. To test unmerged changes under `k8s/`, push your branch and run:
+
+```bash
+TF_VAR_demo_apps_revision=<branch> make ci-apply
+```
+
+The root app and every ApplicationSet labelled `tmhs.io/revision: root` follow that
+revision (through a kustomize patch on the root app).
+
+**Watching a canary:** change the Rollout image colour in an overlay (e.g.
+`argoproj/rollouts-demo:blue` → `yellow` in `k8s/kustomize/dev/kustomization.yaml`),
+push, and that spoke's Rollout pauses at 50% before promoting. Tested by pushing a
+colour change: the spokes went `Paused (step 1)` → `Healthy` on the new image.
+
+---
+
+## How it is orchestrated: Terramate Scripts
+
+There is no tier loop in bash. [`scripts.tm.hcl`](scripts.tm.hcl) defines a
+`deploy` script, and `make ci-apply` is three Terramate commands:
+
+```bash
+terramate script run --tags local deploy   # every local stack, in stack-graph order
+terramate script run ci test               # demo-app checks (spoke provisioning stacks only)
+terramate script run ci argo               # print the hub URL + login
+```
+
+- **Ordering comes from the stack graph.** Terramate runs every job of a script for
+  one stack before moving to the next, following the `after` edges the bundle
+  already declares: bootstrap → network → cluster → nodes → provisioning, and
+  spoke provisioning after hub provisioning. Per-stack init + apply is exactly what
+  outputs-sharing needs (a producer is applied before any consumer is initialised).
+- **Local-only steps are chosen per stack from its tags.** A `local` bootstrap
+  stack also starts MiniStack (`make/ci-up.sh`), and a `local` cluster stack also
+  pulls its k3s certs + container IP into `.ministack/` (`make/ci-kubeconfig.sh`)
+  right after it applies.
+- **`ci test` and `ci argo` exist only where they make sense.** The argocd-spoke and
+  argocd-hub components *generate* those script blocks into the local
+  provisioning stacks, so `terramate script run ci test` reaches exactly the two
+  spokes, and `terramate script list` shows where each is defined.
+
+The same `deploy` script drives real environments: `make apply ENV=dev` is
+`terramate script run --tags env-dev deploy`.
 
 ---
 
 ## How an environment becomes local
 
-`config.tm.hcl` gives `ci-hub` an `endpoint`:
+`config.tm.hcl` gives each local env an `endpoint`:
 
 ```hcl
-"ci-hub" = {
-  account_id = "000000000099"
-  region     = "us-east-1"
-  endpoint   = "http://localhost:4566"
-}
+"ci-hub" = { account_id = "000000000099", region = "us-east-1", endpoint = "http://localhost:4566" }
+"ci-dev" = { account_id = "000000000098", region = "us-east-1", endpoint = "http://localhost:4566" }
+"ci-prd" = { account_id = "000000000097", region = "us-east-1", endpoint = "http://localhost:4566" }
 ```
+
+(`stack_group: ci` on the env in `_scaffold-cluster.tm.yml` additionally files its
+stacks under `stacks/ci/` instead of `stacks/aws/`. That's only the folder: stack ids,
+state keys and ordering don't depend on it.)
 
 That single field is the switch. `objects/inputs/account-map.tm.hcl` surfaces it
 (`""` for real environments), and each component checks it. Nothing keys off the
-string `"ci-hub"`, so a second local environment (e.g. `ci-spoke`) is just
-another `endpoint` entry.
+env names, so another local env is just another `endpoint` entry plus a scaffold
+entry.
 
 MiniStack turns a **12-digit access key into the account id**, which is why
-`account_id` and the access key are the same value.
+`account_id` and the access key are the same value. That makes the three local
+envs three separate accounts on one endpoint. Each cluster gets its own k3s
+container and host port (16443, 16444, 16445, …).
 
 Components emit local variants as *separate* `generate_hcl` blocks with opposite
 conditions rather than conditionals inside the shared block, so the real-AWS
@@ -45,35 +129,26 @@ output stays byte-identical.
 
 ## What differs from a real environment
 
-Five deliberate divergences. Each is a MiniStack gap, not a preference.
+Each divergence is a MiniStack gap, not a preference.
 
 | # | Divergence | Why |
 |---|---|---|
-| 1 | **Kubernetes auth uses a client certificate, not exec-auth** | `aws eks get-token` returns a well-formed `ExecCredential`, but MiniStack's k3s has no aws-iam-authenticator webhook and answers `401`. `make ci-kubeconfig` extracts k3s's admin cert into `.ministack/`. |
-| 2 | `enable_irsa = false` | MiniStack serves the cluster's OIDC issuer over `http://`; the module's `data.tls_certificate` refuses any scheme but `https`/`tls`. |
-| 3 | `use_latest_ami_release_version = false` | The lookup reads `/aws/service/eks/optimized-ami/...` from SSM's *public* parameter store, which MiniStack does not carry. |
-| 4 | No `aws_eks_pod_identity_association` | `CreatePodIdentityAssociation` returns `No route`. The binding would be inert against k3s anyway. |
-| 5 | No `assume_role` on provider or backend | MiniStack authenticates purely on the access key. There is no role to assume. |
+| 1 | **Kubernetes auth uses a client certificate, not exec-auth** | `aws eks get-token` returns a well-formed `ExecCredential`, but MiniStack's k3s has no aws-iam-authenticator webhook and answers `401`. `make/ci-kubeconfig.sh` extracts each k3s admin cert into `.ministack/`. |
+| 2 | **Spokes register with ArgoCD by client cert + container IP** | The real cluster secret uses `awsAuthConfig` (an EKS token: 401 again) and the EKS endpoint. MiniStack reports `https://localhost:<port>`, which only resolves on the host, not inside the hub's ArgoCD pod. The local secret uses `tlsClientConfig` with the spoke's k3s cert, and its Docker bridge IP (k3s's serving cert includes that IP). |
+| 3 | **The ArgoCD UI is published through a proxy container** | MiniStack's k3s publishes only its API port, and under Docker Desktop container IPs are not routable from the host. The local hub adds a NodePort service and a socat container (tofu-managed, `kreuzwerker/docker` provider) on `127.0.0.1:8443`. |
+| 4 | `enable_irsa = false` | MiniStack serves the cluster's OIDC issuer over `http://`; the module's `data.tls_certificate` refuses any scheme but `https`/`tls`. |
+| 5 | `use_latest_ami_release_version = false` | The lookup reads `/aws/service/eks/optimized-ami/...` from SSM's *public* parameter store, which MiniStack does not carry. |
+| 6 | No `aws_eks_pod_identity_association` | `CreatePodIdentityAssociation` returns `No route`. The binding would be inert against k3s anyway. |
+| 7 | No `assume_role` on provider or backend | MiniStack authenticates purely on the access key. There is no role to assume. |
 
-**Divergence 1 is the one that matters.** The auth path `ci-hub` exercises is not
-the one production uses, so a green `ci-hub` run does not prove exec-auth works. It proves
-the state/backend/sharing/ordering machinery works, and that the Kubernetes and
-Helm resources apply against a real API server.
+**Divergences 1 and 2 are the ones that matter.** A green local run does not prove
+exec-auth or the hub controller's cross-account role assumption into the spokes.
+It does prove the state/backend/sharing/ordering machinery, the hub → spoke
+registration secrets, hub → spoke networking, ApplicationSet fan-out, sync,
+health, and Argo Rollouts canaries, all against real Kubernetes API servers.
 
 Also note k3s reports **v1.31.4** even though `describe-cluster` echoes back the
 requested `1.33`, so add-on versions pinned for 1.33 are not truly exercised.
-
----
-
-## Why `ci-hub-apply` goes tier by tier
-
-Outputs-sharing cannot resolve a producer's outputs until that producer is
-applied, so `tofu init` across the whole environment fails up front with
-`This object does not have an attribute named "vpc_id"`. Each tier is initialized
-and applied before the next.
-
-`make ci-kubeconfig` must land **between cluster and nodes** — it reads certs out
-of the k3s container that the cluster stack creates.
 
 ---
 
@@ -81,19 +156,25 @@ of the k3s container that the cluster stack creates.
 
 - **Docker, with the socket mounted.** `make ci-up` does this. Without
   `-v /var/run/docker.sock:/var/run/docker.sock`, EKS is a control-plane stub and
-  no k3s container ever appears — the cluster stack "succeeds" but nothing runs.
-- Ports `4566` (MiniStack) and `16443` (k3s API).
+  no k3s container ever appears; the cluster stack "succeeds" but nothing runs.
+- Ports `4566` (MiniStack), `16443`–`16445` (one k3s API per cluster), and `8443`
+  (the hub ArgoCD UI).
+- Internet access from the k3s clusters: ArgoCD pulls charts from GitHub and
+  argo-helm, and the spokes pull the demo images from Docker Hub.
+
+Run just the hub with `make ci-hub-apply` (about 4 minutes); it skips the spokes and
+the demo-app test.
 
 ---
 
 ## CI safety
 
-`ci-hub` stacks carry a `local` tag, and `preview.yml` filters with
+Every local stack carries a `local` tag, and `preview.yml` filters with
 `--tags eks --no-tags local`. Without that, GitHub Actions would try to plan
 `localhost:4566` stacks against real AWS.
 
 ```console
-$ terramate list --tags eks | wc -l              # 16
+$ terramate list --tags eks | wc -l                   # 24
 $ terramate list --tags eks --no-tags local | wc -l   # 12  <- what CI plans
 ```
 

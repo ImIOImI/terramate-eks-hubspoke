@@ -1,0 +1,73 @@
+// TERRAMATE: GENERATED AUTOMATICALLY DO NOT EDIT
+
+script "ci" "test" {
+  description = "Wait for the hub to sync + heal this spoke's demo apps, then show them on the spoke"
+  job {
+    commands = [
+      [
+        "docker",
+        "exec",
+        "ministack-eks-us-east-1-tmhs-eks-ci-hub",
+        "kubectl",
+        "-n",
+        "argocd",
+        "wait",
+        "--for=create",
+        "--timeout=6m",
+        "application/argo-rollouts-tmhs-eks-ci-dev",
+      ],
+      [
+        "docker",
+        "exec",
+        "ministack-eks-us-east-1-tmhs-eks-ci-hub",
+        "kubectl",
+        "-n",
+        "argocd",
+        "wait",
+        "--for=create",
+        "--timeout=6m",
+        "application/hello-tmhs-eks-ci-dev",
+      ],
+      [
+        "docker",
+        "exec",
+        "ministack-eks-us-east-1-tmhs-eks-ci-hub",
+        "kubectl",
+        "-n",
+        "argocd",
+        "wait",
+        "--for=jsonpath={.status.sync.status}=Synced",
+        "--timeout=10m",
+        "application/argo-rollouts-tmhs-eks-ci-dev",
+        "application/hello-tmhs-eks-ci-dev",
+      ],
+      [
+        "docker",
+        "exec",
+        "ministack-eks-us-east-1-tmhs-eks-ci-hub",
+        "kubectl",
+        "-n",
+        "argocd",
+        "wait",
+        "--for=jsonpath={.status.health.status}=Healthy",
+        "--timeout=10m",
+        "application/argo-rollouts-tmhs-eks-ci-dev",
+        "application/hello-tmhs-eks-ci-dev",
+      ],
+      [
+        "docker",
+        "exec",
+        "ministack-eks-us-east-1-tmhs-eks-ci-dev",
+        "kubectl",
+        "get",
+        "deploy,rollouts.argoproj.io,pods",
+        "-n",
+        "hello",
+        "-L",
+        "overlay",
+        "-o",
+        "wide",
+      ],
+    ]
+  }
+}

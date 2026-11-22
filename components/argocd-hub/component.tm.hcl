@@ -35,4 +35,19 @@ define "component" {
     type        = any
     description = "list of environment ids whose spoke-access roles the ArgoCD controller may assume"
   }
+  input "demo_apps" {
+    type        = bool
+    description = "install a root Application (app-of-apps) for k8s/argo: Argo Rollouts + the k8s/kustomize hello apps on every registered spoke"
+    default     = false
+  }
+  input "demo_apps_repo" {
+    type        = string
+    description = "git URL ArgoCD pulls k8s/ from"
+    default     = ""
+  }
+  input "argocd_apps_chart_version" {
+    type        = string
+    description = "argocd-apps Helm chart version"
+    default     = ""
+  }
 }

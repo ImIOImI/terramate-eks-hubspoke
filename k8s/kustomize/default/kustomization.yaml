@@ -1,0 +1,12 @@
+# Base for the hello apps every spoke gets (see k8s/README.md).
+# Overlays: ../dev, ../prd. The hub's `hello` ApplicationSet picks the overlay
+# from the spoke's cluster-secret label `overlay`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hello
+resources:
+  - hello-world.yaml
+  - hello-rollout.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: hello

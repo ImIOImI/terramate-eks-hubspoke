@@ -91,3 +91,168 @@ generate_hcl "_tmgen-argocd-hub.tf" {
     }
   }
 }
+
+# ---------------------------------------------------------------------------
+# Local (MiniStack) only: make the hub ArgoCD UI reachable from your browser.
+#
+# MiniStack's k3s container publishes only its API port, and under Docker
+# Desktop container IPs are not routable from the host. So: a NodePort service
+# in front of argocd-server, plus a tiny socat container that publishes
+# 127.0.0.1:8443 and forwards to <k3s container ip>:30443. The k3s IP comes from
+# .ministack/<cluster>.ip, written by make/ci-kubeconfig.sh after the cluster
+# stack applies. The proxy is named ministack-* so `make ci-down` removes it.
+#
+# Separate block (not conditionals in the one above) so real-AWS output stays
+# byte-identical.
+# ---------------------------------------------------------------------------
+generate_hcl "_tmgen-argocd-hub-local.tf" {
+  condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint != ""
+  lets {
+    ministack = "${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}"
+  }
+  content {
+    # (the docker provider is declared by the `required` component: the bundle
+    # adds it to a local hub's provider map)
+    resource "kubernetes_service_v1" "argocd_server_nodeport" {
+      metadata {
+        name      = "argocd-server-local"
+        namespace = "argocd"
+      }
+      spec {
+        type     = "NodePort"
+        selector = { "app.kubernetes.io/name" = "argocd-server" }
+        port {
+          name        = "https"
+          port        = 443
+          target_port = 8080
+          node_port   = 30443
+        }
+      }
+      depends_on = [helm_release.argocd]
+    }
+
+    resource "docker_image" "socat" {
+      name         = "alpine/socat:1.8.0.3"
+      keep_locally = true
+    }
+
+    resource "docker_container" "argocd_proxy" {
+      name    = "ministack-argocd-${component.input.cluster_name.value}"
+      image   = docker_image.socat.image_id
+      restart = "unless-stopped"
+      command = ["tcp-listen:8443,fork,reuseaddr", "tcp:${trimspace(file("${let.ministack}.ip"))}:30443"]
+      ports {
+        internal = 8443
+        external = 8443
+        ip       = "127.0.0.1"
+      }
+      depends_on = [kubernetes_service_v1.argocd_server_nodeport]
+    }
+
+    data "kubernetes_secret_v1" "argocd_initial_admin" {
+      metadata {
+        name      = "argocd-initial-admin-secret"
+        namespace = "argocd"
+      }
+      depends_on = [helm_release.argocd]
+    }
+
+    output "argocd_url" {
+      description = "Hub ArgoCD UI (self-signed certificate)"
+      value       = "https://localhost:8443"
+    }
+
+    output "argocd_admin_password" {
+      description = "Initial password for the ArgoCD admin user"
+      value       = data.kubernetes_secret_v1.argocd_initial_admin.data.password
+      sensitive   = true
+    }
+
+    # What `terramate script run ci argo` prints.
+    output "argocd_login" {
+      description = "Hub ArgoCD URL + credentials, ready to read"
+      sensitive   = true
+      value       = <<-EOT
+        ArgoCD hub (${component.input.env.value}): https://localhost:8443   (self-signed certificate)
+          user:     admin
+          password: ${data.kubernetes_secret_v1.argocd_initial_admin.data.password}
+        EOT
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Demo apps (demo_apps = true; on for ci-hub): app-of-apps.
+#
+# Tofu declares ONE root Application, pointing ArgoCD at k8s/argo in this repo.
+# From there ArgoCD manages its own ApplicationSets from git (Argo Rollouts
+# controller + the k8s/kustomize hello apps, fanned out to every registered
+# spoke). See k8s/README.md.
+#
+# It is declared through the argocd-apps chart rather than kubernetes_manifest,
+# which would need ArgoCD's CRDs to exist at plan time.
+#
+# var.demo_apps_revision picks the git revision for the root app AND, through a
+# kustomize patch, for every ApplicationSet labelled tmhs.io/revision=root, so
+# `TF_VAR_demo_apps_revision=<branch>` tests a pushed branch end to end.
+# ---------------------------------------------------------------------------
+generate_hcl "_tmgen-argocd-demo-apps.tf" {
+  condition = component.input.enabled.value && component.input.demo_apps.value
+  content {
+    variable "demo_apps_revision" {
+      type        = string
+      description = "git revision of ${component.input.demo_apps_repo.value} that ArgoCD deploys k8s/ from"
+      default     = "main"
+    }
+
+    resource "helm_release" "argocd_root_app" {
+      name       = "argocd-root-app"
+      namespace  = "argocd"
+      repository = "https://argoproj.github.io/argo-helm"
+      chart      = "argocd-apps"
+      version    = component.input.argocd_apps_chart_version.value
+      depends_on = [helm_release.argocd]
+
+      values = [yamlencode({
+        applications = {
+          k8s-argo = {
+            namespace = "argocd"
+            project   = "default"
+            source = {
+              repoURL        = component.input.demo_apps_repo.value
+              targetRevision = tm_hcl_expression("var.demo_apps_revision")
+              path           = "k8s/argo"
+              kustomize = {
+                patches = [{
+                  target = { kind = "ApplicationSet", labelSelector = "tmhs.io/revision=root" }
+                  patch = tm_hcl_expression(<<-EXPR
+                    jsonencode([{ op = "replace", path = "/spec/template/spec/source/targetRevision", value = var.demo_apps_revision }])
+                  EXPR
+                  )
+                }]
+              }
+            }
+            destination = { server = "https://kubernetes.default.svc", namespace = "argocd" }
+            syncPolicy  = { automated = { prune = true, selfHeal = true } }
+          }
+        }
+      })]
+    }
+  }
+}
+
+# `terramate script run ci argo` -- prints where to look. Generated only into
+# the local hub provisioning stack, so it runs nowhere else.
+generate_hcl "_tmgen-ci-argo-script.tm.hcl" {
+  condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint != ""
+  content {
+    script "ci" "argo" {
+      description = "Print the hub ArgoCD URL + admin credentials"
+      job {
+        commands = [
+          ["tofu", "output", "-raw", "argocd_login"],
+        ]
+      }
+    }
+  }
+}

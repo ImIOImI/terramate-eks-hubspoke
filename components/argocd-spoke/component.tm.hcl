@@ -31,6 +31,11 @@ define "component" {
     type        = string
     description = "short name prefix used for all named resources"
   }
+  input "k8s_overlay" {
+    type        = string
+    description = "k8s/kustomize overlay the hub deploys to this spoke (cluster-secret label `overlay`; local variant)"
+    default     = ""
+  }
   input "cluster_stack_id" {
     type        = string
     description = "Terramate stack UUID of this spoke's eks-cluster stack; used by the kubernetes provider component to wire cluster_endpoint/cluster_ca sharing inputs"
