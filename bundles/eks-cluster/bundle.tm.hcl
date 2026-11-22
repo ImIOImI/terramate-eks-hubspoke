@@ -374,12 +374,15 @@ define bundle stack "provisioning" {
   component "required" {
     source = "/components/providers/required"
     inputs {
-      # aws + kubernetes always; helm on the hub (where the ArgoCD Helm release lives).
-      providers = bundle.input.role.value == "hub" ? {
+      # aws + kubernetes always; helm on the hub (where the ArgoCD Helm release lives);
+      # docker on a local hub (the ArgoCD UI proxy container, argocd-hub component).
+      providers = bundle.input.role.value == "hub" ? tm_merge({
         aws        = bundle.input.providers_map.value.aws
         kubernetes = bundle.input.providers_map.value.kubernetes
         helm       = bundle.input.providers_map.value.helm
-        } : {
+        }, bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? {
+        docker = bundle.input.providers_map.value.docker
+        } : {}) : {
         aws        = bundle.input.providers_map.value.aws
         kubernetes = bundle.input.providers_map.value.kubernetes
       }

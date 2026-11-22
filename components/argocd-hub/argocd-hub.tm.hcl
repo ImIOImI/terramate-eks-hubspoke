@@ -111,15 +111,8 @@ generate_hcl "_tmgen-argocd-hub-local.tf" {
     ministack = "${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}"
   }
   content {
-    terraform {
-      required_providers {
-        docker = {
-          source  = "kreuzwerker/docker"
-          version = "~> 4.7"
-        }
-      }
-    }
-
+    # (the docker provider is declared by the `required` component: the bundle
+    # adds it to a local hub's provider map)
     resource "kubernetes_service_v1" "argocd_server_nodeport" {
       metadata {
         name      = "argocd-server-local"
