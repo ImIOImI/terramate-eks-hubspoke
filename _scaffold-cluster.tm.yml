@@ -66,17 +66,20 @@ environments:
   # the hub ArgoCD deploy the hello-world charts + Argo Rollouts to every spoke.
   ci-hub:
     inputs:
+      stack_group: ci             # stacks/ci/: see stacks/ci/README.md
       role: hub
       oidc_entry: true
       spoke_envs: ["ci-dev", "ci-prd"]
       demo_apps: true
   ci-dev:
     inputs:
+      stack_group: ci             # stacks/ci/: see stacks/ci/README.md
       role: spoke
       hub_env: ci-hub
       oidc_entry_env: ci-hub
   ci-prd:
     inputs:
+      stack_group: ci             # stacks/ci/: see stacks/ci/README.md
       role: spoke
       hub_env: ci-hub
       oidc_entry_env: ci-hub

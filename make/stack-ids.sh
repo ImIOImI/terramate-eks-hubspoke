@@ -9,10 +9,13 @@
 #
 # The stack id is then a pure function of the stack path:
 #
-#     /stacks/aws/dev/eks/network  ->  dev-eks-network
-#     /stacks/aws/dev/bootstrap    ->  dev-bootstrap
+#     /stacks/aws/dev/eks/network    ->  dev-eks-network
+#     /stacks/aws/dev/bootstrap      ->  dev-bootstrap
+#     /stacks/ci/ci-hub/eks/cluster  ->  ci-hub-eks-cluster
 #
-# i.e. strip $STACK_PREFIX and turn '/' into '-'. Paths are unique, so ids are
+# i.e. strip /stacks/<stack_group>/ and turn '/' into '-'. The stack group (aws,
+# or ci for the local MiniStack envs) is a per-env scaffold input and is NOT part
+# of the id, so moving an env between groups keeps its ids (and state keys). Paths are unique, so ids are
 # unique by construction, and both the bundle and this script can compute the
 # same id independently -- which is what lets bundles infer from_stack_id
 # instead of taking it as a hand-wired input.
@@ -25,13 +28,27 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-STACK_PREFIX="${STACK_PREFIX:-/stacks/aws/}"
-
-# id_for <stack path>
+# id_for <stack path>: drop "/stacks/<group>/", then '/' -> '-'
 id_for() {
-  local p="${1#"$STACK_PREFIX"}"
-  p="${p#/}"
+  local p="${1#/stacks/}"
+  p="${p#*/}"
   printf '%s' "${p//\//-}"
+}
+
+# group_of <scaffold file> <env> -> that env's stack_group input (default: aws)
+group_of() {
+  awk -v env="$2" '
+    /^environments:[[:space:]]*$/ { inenv = 1; next }
+    inenv && /^[^[:space:]#]/     { inenv = 0 }
+    inenv && /^  [A-Za-z0-9_-]+:/ {
+      key = $0; sub(/^[[:space:]]+/, "", key); sub(/:.*$/, "", key); cur = key
+    }
+    inenv && cur == env && /stack_group:[[:space:]]*/ {
+      v = $0; sub(/.*stack_group:[[:space:]]*/, "", v); sub(/[[:space:],}#].*$/, "", v); gsub(/["\x27]/, "", v)
+      print v; found = 1; exit
+    }
+    END { if (!found) print "aws" }
+  ' "$1"
 }
 
 # envs_of <scaffold file> -> environment ids, one per line
@@ -82,6 +99,7 @@ cmd_list() {
       while read -r tmpl; do
         [[ -n $tmpl ]] || continue
         path="${tmpl//\$\{bundle.environment.id\}/$env}"
+        path="${path//\$\{bundle.input.stack_group.value\}/$(group_of "$f" "$env")}"
         printf '%s %s\n' "$(id_for "$path")" "$path"
       done < <(path_templates "${bundle#/}")
     done
