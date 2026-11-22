@@ -182,7 +182,7 @@ disagree.
 ```console
 $ terramate list --tags oidc-entry
 stacks/aws/infra/bootstrap
-stacks/aws/ci-hub/bootstrap
+stacks/ci/ci-hub/bootstrap
 ```
 
 ---

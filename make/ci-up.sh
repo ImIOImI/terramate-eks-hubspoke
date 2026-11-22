@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bring up MiniStack (https://ministack.org): the single local AWS endpoint that
-# every local env (ci-hub now, a future ci-spoke) shares.
+# every local env (ci-hub, ci-dev, ci-prd) shares.
 #
 # The docker socket mount is REQUIRED: without it EKS is a control-plane stub and
 # CreateCluster never spawns the k3s container the cluster stack needs.

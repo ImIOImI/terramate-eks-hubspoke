@@ -22,38 +22,48 @@ ArgoCD hub (ci-hub): https://localhost:8443   (self-signed certificate)
   password: <generated>
 ```
 
-Open it to see both spoke clusters and the six demo Applications. `make ci-argo`
-prints it again at any time.
+Open it to see both spoke clusters, the root `k8s-argo` app, and the four apps it
+fans out to the spokes. `make ci-argo` prints it again at any time.
+
+Where the local stacks live, and why their auth differs from the real ones:
+[`stacks/ci/README.md`](stacks/ci/README.md).
 
 ---
 
 ## What gets deployed to every spoke
 
-`ci-hub` sets `demo_apps: true` in `_scaffold-cluster.tm.yml`. Its ArgoCD then owns
-three ApplicationSets that target **every registered spoke** (any cluster secret
-carrying the `env` label; the hub's own in-cluster entry has none):
+`ci-hub` sets `demo_apps: true` in `_scaffold-cluster.tm.yml`. Tofu then installs one
+**root Application** pointing ArgoCD at [`k8s/argo`](k8s/argo) (app-of-apps), and
+ArgoCD manages the rest from git:
 
-| ApplicationSet | Source | Proves |
+| ApplicationSet (`k8s/argo/`) | Deploys | Proves |
 |---|---|---|
-| `argo-rollouts` | argo-helm `argo-rollouts` chart | the hub can install a controller + CRDs on a spoke |
-| `hello-world` | [`charts/hello-world`](charts/hello-world) — a Deployment of `traefik/whoami` | plain sync + health across clusters |
-| `hello-rollout` | [`charts/hello-rollout`](charts/hello-rollout) — a canary `Rollout` of `argoproj/rollouts-demo` | Argo Rollouts progressive delivery (50% → pause → 100%) |
+| `argo-rollouts` | argo-helm `argo-rollouts` chart, to every spoke | the hub can install a controller + CRDs on a spoke |
+| `hello` | [`k8s/kustomize/<overlay>`](k8s/kustomize): a `hello-world` Deployment (`traefik/whoami`) + a canary `hello-rollout` (`argoproj/rollouts-demo`) | sync + health across clusters, per-spoke overlays, Argo Rollouts progressive delivery (50% → pause → 100%) |
 
-`make ci-test` (part of `make ci-apply`) waits, on the hub, for each spoke's three
+Each spoke gets its own overlay, chosen by the `overlay` label on its cluster
+secret (`k8s_overlay` in the scaffold): `ci-dev` → `k8s/kustomize/dev` (1 / 2
+replicas, blue, 10 s canary pause), `ci-prd` → `k8s/kustomize/prd` (2 / 3, green,
+30 s). See [`k8s/README.md`](k8s/README.md).
+
+`make ci-test` (part of `make ci-apply`) waits, on the hub, for each spoke's two
 Applications to be **Synced** and **Healthy**, then lists what actually landed on
-that spoke's own k3s.
+that spoke's own k3s, with its overlay.
 
-**Charts come from git, not your working tree.** ArgoCD clones this repo, at
-`main` by default. To test unmerged chart changes, push your branch and run with:
+**Manifests come from git, not your working tree.** ArgoCD clones this repo, at
+`main` by default. To test unmerged changes under `k8s/`, push your branch and run:
 
 ```bash
 TF_VAR_demo_apps_revision=<branch> make ci-apply
 ```
 
-**Watching a canary:** change `color:` in `charts/hello-rollout/values.yaml` (for
-example `blue` → `yellow`), push, and the Rollout on each spoke pauses at 50% for
-30 s before promoting. Tested by pushing a yellow commit: both spokes went
-`Paused (step 1)` → `Healthy` on the new image.
+The root app and every ApplicationSet labelled `tmhs.io/revision: root` follow that
+revision (through a kustomize patch on the root app).
+
+**Watching a canary:** change the Rollout image colour in an overlay (e.g.
+`argoproj/rollouts-demo:blue` → `yellow` in `k8s/kustomize/dev/kustomization.yaml`),
+push, and that spoke's Rollout pauses at 50% before promoting. Tested by pushing a
+colour change: the spokes went `Paused (step 1)` → `Healthy` on the new image.
 
 ---
 
@@ -96,6 +106,10 @@ The same `deploy` script drives real environments: `make apply ENV=dev` is
 "ci-dev" = { account_id = "000000000098", region = "us-east-1", endpoint = "http://localhost:4566" }
 "ci-prd" = { account_id = "000000000097", region = "us-east-1", endpoint = "http://localhost:4566" }
 ```
+
+(`stack_group: ci` on the env in `_scaffold-cluster.tm.yml` additionally files its
+stacks under `stacks/ci/` instead of `stacks/aws/`. That's only the folder: stack ids,
+state keys and ordering don't depend on it.)
 
 That single field is the switch. `objects/inputs/account-map.tm.hcl` surfaces it
 (`""` for real environments), and each component checks it. Nothing keys off the

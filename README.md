@@ -57,7 +57,7 @@ with per-environment input overrides.  The `stacks/` directory is the generated 
 ```text
 _scaffold-cluster.tm.yml ─── eks-cluster bundle ──► stacks/aws/<env>/bootstrap
                                                 ──► stacks/aws/<env>/eks/{network,cluster,nodes,provisioning}
-                                                    (for env in infra, dev, prd, ci-hub, ci-dev, ci-prd)
+                                                    (stacks/ci/<env>/... for the local ci-hub, ci-dev, ci-prd)
 ```
 
 Within each cluster, stacks run in dependency order automatically:
@@ -83,7 +83,8 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 | Components | `components/` | `network`, `eks-cluster`, `eks-nodes`, `eks-core-addons`, `argocd-hub`, `argocd-spoke`, `bootstrap`, `providers` |
 | Bundles | `bundles/` | `eks-cluster/` — the full per-account tree (bootstrap + eks chain), role=hub or spoke |
 | Scaffold | repo root | `_scaffold-cluster.tm.yml` — the only hand-written instance layer |
-| Stacks | `stacks/aws/{infra,dev,prd}/` | Generated; never edit |
+| Stacks | `stacks/aws/{infra,dev,prd}/`, `stacks/ci/{ci-hub,ci-dev,ci-prd}/` | Generated; never edit. `stacks/ci/` is the local Argo hub/spoke test env ([README](stacks/ci/README.md)) |
+| Kubernetes manifests | `k8s/argo/`, `k8s/kustomize/{default,dev,prd}/` | What the hub ArgoCD deploys to spokes ([README](k8s/README.md)) |
 | CI | `.github/workflows/` | `preview.yml` (PR), `deploy.yml` (merge to main) |
 | Local `ci-hub` / `ci-dev` / `ci-prd` envs | `MINISTACK.md` | A hub + two spokes on [MiniStack](https://ministack.org) with no AWS account; ArgoCD deploys hello-world + Argo Rollouts demos to both spokes |
 | Bootstrapping | `BOOTSTRAPPING.md` | First-run order: why bootstrap precedes the cluster stacks, derived stack ids |
@@ -124,7 +125,7 @@ sudo dpkg -i /tmp/terramate.deb
 
 > **No AWS account?** `make ci-apply` runs the entire chain for a hub and two spokes
 > against [MiniStack](https://ministack.org) locally: a real ArgoCD on the hub
-> deploys hello-world and an Argo Rollouts canary to both spokes, then the run prints
+> deploys a kustomize hello app (per-spoke overlays) and an Argo Rollouts canary to both spokes, then the run prints
 > the hub's ArgoCD URL and login. See [MINISTACK.md](MINISTACK.md).
 
 **AWS accounts:** you need three AWS accounts: one for `infra` (hub + CI OIDC entry),
