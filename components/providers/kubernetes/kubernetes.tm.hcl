@@ -182,7 +182,7 @@ generate_hcl "_tmgen-provider-kubernetes.tf" {
 # are meaningful (the `after` edge in the bundle handles ordering).
 # ---------------------------------------------------------------------------
 generate_hcl "_tmgen-provider-kubernetes-hub.tf" {
-  condition = component.input.hub_env.value != ""
+  condition = component.input.hub_env.value != "" && component.input.account_map.value[component.input.env.value].endpoint == ""
 
   lets {
     # tm_try guards the disabled case: `lets` is evaluated even when
@@ -204,6 +204,23 @@ generate_hcl "_tmgen-provider-kubernetes-hub.tf" {
           "--role-arn", let.hub.deploy_role_arn,
         ]
       }
+    }
+  }
+}
+
+# Local (MiniStack) variant of the hub alias -- client-cert auth against the hub's
+# k3s, same as the local providers above (see LOCAL AUTH PATH). The hub's certs
+# are in .ministack/ because the hub env applies first in the same checkout.
+generate_hcl "_tmgen-provider-kubernetes-hub.tf" {
+  condition = component.input.hub_env.value != "" && component.input.account_map.value[component.input.env.value].endpoint != ""
+
+  content {
+    provider "kubernetes" {
+      alias                  = "hub"
+      host                   = var.hub_cluster_endpoint
+      cluster_ca_certificate = base64decode(var.hub_cluster_ca)
+      client_certificate     = file("${terramate.stack.path.to_root}/.ministack/${component.input.hub_cluster_name.value}.crt")
+      client_key             = file("${terramate.stack.path.to_root}/.ministack/${component.input.hub_cluster_name.value}.key")
     }
   }
 }

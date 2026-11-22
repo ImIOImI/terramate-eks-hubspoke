@@ -1,0 +1,6 @@
+apiVersion: v2
+name: hello-rollout
+description: Argo Rollouts smoke test -- a canary Rollout of argoproj/rollouts-demo. Needs the argo-rollouts controller (deployed alongside it by the hub when demo_apps is on).
+type: application
+version: 0.1.0
+appVersion: "blue"

@@ -1,0 +1,4 @@
+# Set per spoke by the hub's ApplicationSet (the cluster secret's `env` label).
+env: unknown
+replicas: 1
+image: traefik/whoami:v1.10.3

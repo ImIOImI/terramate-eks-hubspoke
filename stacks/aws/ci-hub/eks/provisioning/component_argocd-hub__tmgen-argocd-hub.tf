@@ -27,8 +27,8 @@ resource "aws_iam_role_policy" "argocd_assume_spokes" {
         Effect = "Allow"
         Action = "sts:AssumeRole"
         Resource = [
-          "arn:aws:iam::222222222222:role/tmhs-argocd-spoke-access",
-          "arn:aws:iam::333333333333:role/tmhs-argocd-spoke-access",
+          "arn:aws:iam::000000000098:role/tmhs-argocd-spoke-access",
+          "arn:aws:iam::000000000097:role/tmhs-argocd-spoke-access",
         ]
       },
     ]

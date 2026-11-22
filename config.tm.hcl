@@ -12,11 +12,23 @@ globals {
     # `endpoint` is what makes an env local: every component that talks to AWS
     # checks for it and redirects there instead. account_id must be the 12 digits
     # used as the access key -- MiniStack turns that into the account id.
-    # `ci-hub` plays the hub role (ArgoCD); a future `ci-spoke` would register
-    # against it, sharing this one MiniStack endpoint. Nothing keys off the
-    # string, so adding that spoke is just another entry here.
+    # `ci-hub` plays the hub role (ArgoCD); `ci-dev` and `ci-prd` register
+    # against it as spokes, sharing this one MiniStack endpoint. Nothing keys
+    # off the strings, so another local env is just another entry here.
     "ci-hub" = {
       account_id = "000000000099"
+      region     = "us-east-1"
+      endpoint   = "http://localhost:4566"
+    }
+    # Local spokes of ci-hub, mirroring dev/prd -> infra. Each is its own
+    # MiniStack account (its own access key) on the same endpoint.
+    "ci-dev" = {
+      account_id = "000000000098"
+      region     = "us-east-1"
+      endpoint   = "http://localhost:4566"
+    }
+    "ci-prd" = {
+      account_id = "000000000097"
       region     = "us-east-1"
       endpoint   = "http://localhost:4566"
     }
@@ -34,6 +46,8 @@ globals {
       kubernetes = { source = "hashicorp/kubernetes", version = "~> 2.38" }
       helm       = { source = "hashicorp/helm", version = "~> 3.0" }
       tls        = { source = "hashicorp/tls", version = "~> 4.0" }
+      # local (MiniStack) hub only: publishes the ArgoCD UI on localhost
+      docker = { source = "kreuzwerker/docker", version = "~> 4.7" }
     }
   }
 

@@ -60,6 +60,21 @@ define "bundle" {
     description = "list of spoke environment ids the hub ArgoCD controller may assume into (hub only)"
     default     = ["dev", "prd"]
   }
+  input "demo_apps" {
+    type        = bool
+    description = "hub only: have ArgoCD deploy the hello-world charts (charts/) and the Argo Rollouts controller to every registered spoke"
+    default     = false
+  }
+  input "argo_rollouts_chart_version" {
+    type        = string
+    description = "argo-rollouts Helm chart version deployed to spokes when demo_apps is on"
+    default     = "2.43.12"
+  }
+  input "argocd_apps_chart_version" {
+    type        = string
+    description = "argocd-apps Helm chart version used to declare the demo ApplicationSets"
+    default     = "2.0.8"
+  }
   input "vpc_cidr" {
     type        = string
     description = "CIDR block for this env's VPC"
@@ -319,6 +334,11 @@ define bundle stack "provisioning" {
       project_prefix       = bundle.input.project_prefix.value
       argocd_chart_version = bundle.input.argocd_chart_version.value
       spoke_envs           = bundle.input.spoke_envs.value
+
+      demo_apps                   = bundle.input.demo_apps.value
+      demo_apps_repo              = "https://github.com/${bundle.input.github_repo.value}.git"
+      argo_rollouts_chart_version = bundle.input.argo_rollouts_chart_version.value
+      argocd_apps_chart_version   = bundle.input.argocd_apps_chart_version.value
     }
   }
 
@@ -354,12 +374,15 @@ define bundle stack "provisioning" {
   component "required" {
     source = "/components/providers/required"
     inputs {
-      # aws + kubernetes always; helm on the hub (where the ArgoCD Helm release lives).
-      providers = bundle.input.role.value == "hub" ? {
+      # aws + kubernetes always; helm on the hub (where the ArgoCD Helm release lives);
+      # docker on a local hub (the ArgoCD UI proxy container, argocd-hub component).
+      providers = bundle.input.role.value == "hub" ? tm_merge({
         aws        = bundle.input.providers_map.value.aws
         kubernetes = bundle.input.providers_map.value.kubernetes
         helm       = bundle.input.providers_map.value.helm
-        } : {
+        }, bundle.input.aws_account_map.value[bundle.environment.id].endpoint != "" ? {
+        docker = bundle.input.providers_map.value.docker
+        } : {}) : {
         aws        = bundle.input.providers_map.value.aws
         kubernetes = bundle.input.providers_map.value.kubernetes
       }

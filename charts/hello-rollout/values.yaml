@@ -1,0 +1,8 @@
+# Set per spoke by the hub's ApplicationSet (the cluster secret's `env` label).
+env: unknown
+replicas: 2
+# rollouts-demo ships one tag per colour (blue, yellow, green, red, ...).
+# Change it to watch a canary step through: 50% -> pause -> 100%.
+color: blue
+canary:
+  pause: 30s

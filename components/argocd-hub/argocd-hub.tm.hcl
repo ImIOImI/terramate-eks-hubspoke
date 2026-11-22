@@ -91,3 +91,204 @@ generate_hcl "_tmgen-argocd-hub.tf" {
     }
   }
 }
+
+# ---------------------------------------------------------------------------
+# Local (MiniStack) only: make the hub ArgoCD UI reachable from your browser.
+#
+# MiniStack's k3s container publishes only its API port, and under Docker
+# Desktop container IPs are not routable from the host. So: a NodePort service
+# in front of argocd-server, plus a tiny socat container that publishes
+# 127.0.0.1:8443 and forwards to <k3s container ip>:30443. The k3s IP comes from
+# .ministack/<cluster>.ip, written by make/ci-kubeconfig.sh after the cluster
+# stack applies. The proxy is named ministack-* so `make ci-down` removes it.
+#
+# Separate block (not conditionals in the one above) so real-AWS output stays
+# byte-identical.
+# ---------------------------------------------------------------------------
+generate_hcl "_tmgen-argocd-hub-local.tf" {
+  condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint != ""
+  lets {
+    ministack = "${terramate.stack.path.to_root}/.ministack/${component.input.cluster_name.value}"
+  }
+  content {
+    # (the docker provider is declared by the `required` component: the bundle
+    # adds it to a local hub's provider map)
+    resource "kubernetes_service_v1" "argocd_server_nodeport" {
+      metadata {
+        name      = "argocd-server-local"
+        namespace = "argocd"
+      }
+      spec {
+        type     = "NodePort"
+        selector = { "app.kubernetes.io/name" = "argocd-server" }
+        port {
+          name        = "https"
+          port        = 443
+          target_port = 8080
+          node_port   = 30443
+        }
+      }
+      depends_on = [helm_release.argocd]
+    }
+
+    resource "docker_image" "socat" {
+      name         = "alpine/socat:1.8.0.3"
+      keep_locally = true
+    }
+
+    resource "docker_container" "argocd_proxy" {
+      name    = "ministack-argocd-${component.input.cluster_name.value}"
+      image   = docker_image.socat.image_id
+      restart = "unless-stopped"
+      command = ["tcp-listen:8443,fork,reuseaddr", "tcp:${trimspace(file("${let.ministack}.ip"))}:30443"]
+      ports {
+        internal = 8443
+        external = 8443
+        ip       = "127.0.0.1"
+      }
+      depends_on = [kubernetes_service_v1.argocd_server_nodeport]
+    }
+
+    data "kubernetes_secret_v1" "argocd_initial_admin" {
+      metadata {
+        name      = "argocd-initial-admin-secret"
+        namespace = "argocd"
+      }
+      depends_on = [helm_release.argocd]
+    }
+
+    output "argocd_url" {
+      description = "Hub ArgoCD UI (self-signed certificate)"
+      value       = "https://localhost:8443"
+    }
+
+    output "argocd_admin_password" {
+      description = "Initial password for the ArgoCD admin user"
+      value       = data.kubernetes_secret_v1.argocd_initial_admin.data.password
+      sensitive   = true
+    }
+
+    # What `terramate script run ci argo` prints.
+    output "argocd_login" {
+      description = "Hub ArgoCD URL + credentials, ready to read"
+      sensitive   = true
+      value       = <<-EOT
+        ArgoCD hub (${component.input.env.value}): https://localhost:8443   (self-signed certificate)
+          user:     admin
+          password: ${data.kubernetes_secret_v1.argocd_initial_admin.data.password}
+        EOT
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Demo apps (demo_apps = true; on for ci-hub): ApplicationSets that make the
+# hub deploy to EVERY registered spoke (any cluster secret carrying the `env`
+# label that argocd-spoke writes; the hub's own in-cluster entry has none):
+#
+#   argo-rollouts  — the Argo Rollouts controller (argo-helm chart)
+#   hello-world    — charts/hello-world: plain Deployment + Service
+#   hello-rollout  — charts/hello-rollout: a canary Rollout (needs the controller;
+#                    retries until its CRDs exist)
+#
+# ApplicationSets are declared through the argocd-apps chart rather than
+# kubernetes_manifest, which would need ArgoCD's CRDs to exist at plan time.
+# charts/ are pulled from git: var.demo_apps_revision picks the branch/sha
+# (export TF_VAR_demo_apps_revision=<branch> to test unmerged chart changes).
+# ---------------------------------------------------------------------------
+generate_hcl "_tmgen-argocd-demo-apps.tf" {
+  condition = component.input.enabled.value && component.input.demo_apps.value
+  lets {
+    spokes   = { clusters = { selector = { matchExpressions = [{ key = "env", operator = "Exists" }] } } }
+    sync     = { automated = { prune = true, selfHeal = true }, retry = { limit = 10, backoff = { duration = "10s", factor = 2, maxDuration = "3m" } } }
+    git_repo = component.input.demo_apps_repo.value
+  }
+  content {
+    variable "demo_apps_revision" {
+      type        = string
+      description = "git revision of ${let.git_repo} that ArgoCD deploys charts/ from"
+      default     = "main"
+    }
+
+    resource "helm_release" "argocd_demo_apps" {
+      name       = "argocd-demo-apps"
+      namespace  = "argocd"
+      repository = "https://argoproj.github.io/argo-helm"
+      chart      = "argocd-apps"
+      version    = component.input.argocd_apps_chart_version.value
+      depends_on = [helm_release.argocd]
+
+      values = [yamlencode({
+        applicationsets = {
+          argo-rollouts = {
+            generators = [let.spokes]
+            template = {
+              metadata = { name = "argo-rollouts-{{name}}" }
+              spec = {
+                project = "default"
+                source = {
+                  repoURL        = "https://argoproj.github.io/argo-helm"
+                  chart          = "argo-rollouts"
+                  targetRevision = component.input.argo_rollouts_chart_version.value
+                  helm           = { releaseName = "argo-rollouts" }
+                }
+                destination = { server = "{{server}}", namespace = "argo-rollouts" }
+                syncPolicy  = tm_merge(let.sync, { syncOptions = ["CreateNamespace=true", "ServerSideApply=true"] })
+              }
+            }
+          }
+          hello-world = {
+            generators = [let.spokes]
+            template = {
+              metadata = { name = "hello-world-{{name}}" }
+              spec = {
+                project = "default"
+                source = {
+                  repoURL        = let.git_repo
+                  targetRevision = tm_hcl_expression("var.demo_apps_revision")
+                  path           = "charts/hello-world"
+                  helm           = { parameters = [{ name = "env", value = "{{metadata.labels.env}}" }] }
+                }
+                destination = { server = "{{server}}", namespace = "hello-world" }
+                syncPolicy  = tm_merge(let.sync, { syncOptions = ["CreateNamespace=true"] })
+              }
+            }
+          }
+          hello-rollout = {
+            generators = [let.spokes]
+            template = {
+              metadata = { name = "hello-rollout-{{name}}" }
+              spec = {
+                project = "default"
+                source = {
+                  repoURL        = let.git_repo
+                  targetRevision = tm_hcl_expression("var.demo_apps_revision")
+                  path           = "charts/hello-rollout"
+                  helm           = { parameters = [{ name = "env", value = "{{metadata.labels.env}}" }] }
+                }
+                destination = { server = "{{server}}", namespace = "hello-rollout" }
+                syncPolicy  = tm_merge(let.sync, { syncOptions = ["CreateNamespace=true", "SkipDryRunOnMissingResource=true"] })
+              }
+            }
+          }
+        }
+      })]
+    }
+  }
+}
+
+# `terramate script run ci argo` -- prints where to look. Generated only into
+# the local hub provisioning stack, so it runs nowhere else.
+generate_hcl "_tmgen-ci-argo-script.tm.hcl" {
+  condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint != ""
+  content {
+    script "ci" "argo" {
+      description = "Print the hub ArgoCD URL + admin credentials"
+      job {
+        commands = [
+          ["tofu", "output", "-raw", "argocd_login"],
+        ]
+      }
+    }
+  }
+}

@@ -46,3 +46,13 @@ AVD-AWS-0041
 # and is required for nodes to pull images / reach the EKS + AWS APIs; tighten with
 # a custom egress ruleset in a hardened deployment.
 AVD-AWS-0104
+
+# KSV-0110: workloads in the default namespace. Only the demo charts (charts/) are
+# Kubernetes manifests here, and they deliberately carry no namespace: ArgoCD
+# installs each into its own (hello-world / hello-rollout) via the Application.
+AVD-KSV-0110
+
+# KSV-0125: images from an untrusted registry. The demo charts pull public
+# Docker Hub demo images (traefik/whoami, argoproj/rollouts-demo); there is no
+# private registry in this showcase.
+AVD-KSV-0125
