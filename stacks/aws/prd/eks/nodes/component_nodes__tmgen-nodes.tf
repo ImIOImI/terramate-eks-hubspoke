@@ -17,7 +17,8 @@ module "nodes" {
     aws_eks_addon.kube_proxy,
     aws_eks_addon.vpc_cni,
   ]
-  desired_size = 2
+  desired_size             = 2
+  iam_role_use_name_prefix = true
   instance_types = [
     "t3.large",
   ]

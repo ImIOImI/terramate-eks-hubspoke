@@ -61,6 +61,13 @@ generate_hcl "_tmgen-nodes.tf" {
       name         = "${component.input.cluster_name.value}-default"
       cluster_name = component.input.cluster_name.value
 
+      # The submodule names its IAM role with name_prefix "<name>-eks-node-group-",
+      # and AWS caps a role name_prefix at 38 chars. Env ids longer than 5 chars
+      # (e.g. ci-hub) overflow it, so those use an exact role name instead (64-char
+      # cap). Resolved at generate time; real envs get `true`, the upstream default,
+      # so their plans are unchanged.
+      iam_role_use_name_prefix = tm_length("${component.input.cluster_name.value}-default-eks-node-group-") <= 38
+
       # Pinning this also zeroes out the submodule's data.aws_eks_cluster_versions
       # lookup (count = var.kubernetes_version == null ? 1 : 0), which otherwise
       # floats the node AMI to the latest STANDARD_SUPPORT version -- and which
