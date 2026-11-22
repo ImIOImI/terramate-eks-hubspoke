@@ -34,11 +34,9 @@ anyone with AWS accounts.
 
 ## Tooling decisions
 
-- **GA Terramate 0.17.1+** (not Catalyst). Verified in
-  `/shared/expert-terramate`: GA ≥0.16.0 parses the `define`
-  bundles/components framework; Catalyst is APT-only and would block outside
-  users. Constraint: avoid `define "bundle" "lets"` only if Catalyst parity is
-  ever wanted — not a goal here, GA is the target.
+- **GA Terramate 0.17.0+**: needed for the `define` bundles/components
+  framework (0.16.x cannot parse the bundle `define` blocks; tested range in
+  [TOOLCHAIN.md](TOOLCHAIN.md)).
 - **OpenTofu** (pin ~1.10.x), `.opentofu-version` generated for tenv.
 - terraform-aws-modules for VPC and EKS inside components.
 - **Verify early:** the BundleInstance `environments:` YAML fan-out must be

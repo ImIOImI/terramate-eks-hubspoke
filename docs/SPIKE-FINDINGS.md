@@ -28,16 +28,6 @@ $ terramate version
 resolved through **tenv** to `/opt/tenv/Terramate/0.17.1/terramate`
 (`tenv terramate list` → `* 0.17.1 (used 2026-07-09, set by /opt/tenv/Terramate/version)`).
 
-**Confirmed GA, not Catalyst** (the distinction matters — Catalyst is a
-v0.15.6-line pseudo-version behind GA on schema):
-
-- GA tell: `terramate package` has **no** subcommands
-  (`terramate package create` → `Error: unexpected command sequence` / `unexpected argument`).
-  Catalyst ships `package create`; GA does not.
-- GA has `terramate ui`; Catalyst does not. (Not exercised here, but recorded.)
-- No `catalyst` string in `terramate version`; the `.deb`/APT `terramate-catalyst`
-  package is not installed (`dpkg -l | grep terramate` empty).
-
 **Install command to pin GA >=0.17.1 in CI / a fresh box** (for Task 1 / Task 12
 to reference — the box didn't need it, but the plan asks for the command):
 
@@ -58,10 +48,6 @@ curl -fsSL -o /tmp/terramate.deb \
   https://github.com/terramate-io/terramate/releases/download/v${VER}/terramate_${VER}_linux_amd64.deb
 sudo dpkg -i /tmp/terramate.deb
 ```
-
-> NOTE: GA releases are on GitHub; **Catalyst betas are NOT on GitHub releases**
-> (they come via the Terramate APT repo). For this public showcase we want GA,
-> which is the GitHub-release path — good, it keeps CI install simple.
 
 ---
 

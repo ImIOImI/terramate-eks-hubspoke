@@ -98,7 +98,7 @@ environment { id = "prd"    name = "Production"           promote_from = "dev" }
 | Tool | Version | Notes |
 |---|---|---|
 | OpenTofu | `1.13.9` | Use [tenv](https://github.com/tofuutils/tenv) — it reads the generated `.opentofu-version`. Tested 1.6.0–1.13.9 ([TOOLCHAIN](docs/TOOLCHAIN.md)) |
-| Terramate | `>=0.17.0, <0.18.0` (GA), CI uses `0.17.4` | **Not** Catalyst. See install options below. |
+| Terramate | `>=0.17.0, <0.18.0` (GA), CI uses `0.17.4` | See install options below. |
 | AWS CLI | Any recent | `aws configure` or environment creds |
 | `tflint` | `>=0.63.0` | Optional locally; required by CI |
 | `trivy` | Any recent | Optional locally; required by CI |
@@ -121,10 +121,6 @@ curl -fsSL -o /tmp/terramate.deb \
   https://github.com/terramate-io/terramate/releases/download/v${VER}/terramate_${VER}_linux_amd64.deb
 sudo dpkg -i /tmp/terramate.deb
 ```
-
-> Use the **GA release from GitHub**, not the Catalyst APT repo.  The GA binary is all
-> you need for this repo; Catalyst is a separate distribution that adds cloud-dashboard
-> features and is not required here.
 
 > **No AWS account?** `make ci-hub-apply` runs the entire chain — including a real
 > ArgoCD install — against [MiniStack](https://ministack.org) locally. See
