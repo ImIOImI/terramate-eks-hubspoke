@@ -43,7 +43,8 @@ group_of() {
     inenv && /^  [A-Za-z0-9_-]+:/ {
       key = $0; sub(/^[[:space:]]+/, "", key); sub(/:.*$/, "", key); cur = key
     }
-    inenv && cur == env && /stack_group:[[:space:]]*/ {
+    # a real key line only (indented, not a comment): "      stack_group: ci"
+    inenv && cur == env && /^[[:space:]]+stack_group:[[:space:]]*/ {
       v = $0; sub(/.*stack_group:[[:space:]]*/, "", v); sub(/[[:space:],}#].*$/, "", v); gsub(/["\x27]/, "", v)
       print v; found = 1; exit
     }
