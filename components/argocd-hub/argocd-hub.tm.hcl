@@ -167,6 +167,17 @@ generate_hcl "_tmgen-argocd-hub-local.tf" {
       value       = data.kubernetes_secret_v1.argocd_initial_admin.data.password
       sensitive   = true
     }
+
+    # What `terramate script run ci argo` prints.
+    output "argocd_login" {
+      description = "Hub ArgoCD URL + credentials, ready to read"
+      sensitive   = true
+      value       = <<-EOT
+        ArgoCD hub (${component.input.env.value}): https://localhost:8443   (self-signed certificate)
+          user:     admin
+          password: ${data.kubernetes_secret_v1.argocd_initial_admin.data.password}
+        EOT
+    }
   }
 }
 
@@ -275,11 +286,7 @@ generate_hcl "_tmgen-ci-argo-script.tm.hcl" {
       description = "Print the hub ArgoCD URL + admin credentials"
       job {
         commands = [
-          ["echo", "ArgoCD hub (${component.input.env.value}) -- user: admin"],
-          ["tofu", "output", "-raw", "argocd_url"],
-          ["echo", ""],
-          ["tofu", "output", "-raw", "argocd_admin_password"],
-          ["echo", ""],
+          ["tofu", "output", "-raw", "argocd_login"],
         ]
       }
     }

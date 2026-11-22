@@ -5,28 +5,10 @@ script "ci" "argo" {
   job {
     commands = [
       [
-        "echo",
-        "ArgoCD hub (ci-hub) -- user: admin",
-      ],
-      [
         "tofu",
         "output",
         "-raw",
-        "argocd_url",
-      ],
-      [
-        "echo",
-        "",
-      ],
-      [
-        "tofu",
-        "output",
-        "-raw",
-        "argocd_admin_password",
-      ],
-      [
-        "echo",
-        "",
+        "argocd_login",
       ],
     ]
   }

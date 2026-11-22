@@ -60,3 +60,13 @@ output "argocd_admin_password" {
   sensitive   = true
   value       = data.kubernetes_secret_v1.argocd_initial_admin.data.password
 }
+output "argocd_login" {
+  description = "Hub ArgoCD URL + credentials, ready to read"
+  sensitive   = true
+  value       = <<-EOT
+ArgoCD hub (ci-hub): https://localhost:8443   (self-signed certificate)
+  user:     admin
+  password: ${data.kubernetes_secret_v1.argocd_initial_admin.data.password}
+EOT
+
+}
