@@ -21,8 +21,7 @@ runs:
     - name: Install Terramate GA
       shell: bash
       run: |
-        # GA releases are published to GitHub Releases (NOT the Terramate APT repo,
-        # which carries only Catalyst beta builds). Asset naming: linux_amd64.deb.
+        # GA releases are published to GitHub Releases. Asset naming: linux_amd64.deb.
         # URL verified 2026-11-21: HTTP 200 for v0.17.4.
         VER="${{ inputs.terramate_version }}"
         curl -fsSL -o /tmp/terramate.deb \
