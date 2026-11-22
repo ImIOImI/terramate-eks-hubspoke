@@ -1,4 +1,4 @@
-.PHONY: generate stacks check-ids check validate lint apply ci-up ci-kubeconfig ci-hub-apply ci-down
+.PHONY: generate stacks check-ids check validate lint apply ci-up ci-kubeconfig ci-hub-apply ci-down compat
 stacks:          ## seed each stack.tm.hcl with its derived id (run before first generate)
 	./make/create-stacks.sh
 
@@ -48,3 +48,10 @@ ci-hub-apply:    ## alias for `make apply ENV=ci-hub` (local MiniStack hub)
 ci-down:         ## tear the whole local fabric down (hub + any spoke)
 	docker rm -f $$(docker ps -aq --filter "name=ministack") 2>/dev/null || true
 	rm -rf .ministack
+
+# ── toolchain compatibility ─────────────────────────────────────────────────
+# Test one terramate/tofu/aws combination in a throwaway worktree of HEAD.
+# MODE=validate (default) checks every non-local stack; MODE=apply runs the full
+# ci-hub chain on MiniStack. Tested ranges: docs/TOOLCHAIN.md.
+compat:          ## make compat TM=0.17.4 TOFU=1.13.9 AWS=6.73.0 [MODE=apply]
+	TM=$(TM) TOFU=$(TOFU) AWS=$(AWS) MODE=$(or $(MODE),validate) ./make/compat.sh
