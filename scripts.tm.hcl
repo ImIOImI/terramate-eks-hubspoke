@@ -23,7 +23,7 @@ script "deploy" {
   lets {
     tags    = terramate.stack.tags
     local   = tm_contains(terramate.stack.tags, "local")
-    root    = terramate.stack.path.to_root
+    root    = terramate.root.path.fs.absolute
     env     = tm_element(tm_split("/", terramate.stack.path.absolute), 3)
     cluster = "${global.project_prefix}-eks-${tm_element(tm_split("/", terramate.stack.path.absolute), 3)}"
   }
