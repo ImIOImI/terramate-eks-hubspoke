@@ -184,7 +184,12 @@ generate_hcl "_tmgen-ci-test-script.tm.hcl" {
       description = "Wait for the hub to sync + heal this spoke's demo apps, then show them on the spoke"
       job {
         commands = [
-          tm_concat(["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=5m"], let.apps),
+          # One create-wait per app: a multi-resource wait fails fast on NotFound.
+          # 6m covers the ApplicationSet controller's 3m retry when a spoke's
+          # cluster secret lands while it is mid-reconcile.
+          ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[0]],
+          ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[1]],
+          ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[2]],
           tm_concat(["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=jsonpath={.status.sync.status}=Synced", "--timeout=10m"], let.apps),
           tm_concat(["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=jsonpath={.status.health.status}=Healthy", "--timeout=10m"], let.apps),
           ["docker", "exec", let.spoke_k3s, "kubectl", "get", "deploy,pods", "-n", "hello-world", "-o", "wide"],
