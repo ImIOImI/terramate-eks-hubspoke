@@ -1,6 +1,6 @@
 globals {
   project_prefix = "tmhs"
-  tofu_version   = "1.11.5"
+  tofu_version   = "1.13.9"
   github_repo    = "ImIOImI/terramate-eks-hubspoke"
 
   envs = {
@@ -30,7 +30,7 @@ globals {
 
   terraform = {
     providers = {
-      aws        = { source = "hashicorp/aws", version = "~> 6.0" }
+      aws        = { source = "hashicorp/aws", version = "~> 6.52" }
       kubernetes = { source = "hashicorp/kubernetes", version = "~> 2.38" }
       helm       = { source = "hashicorp/helm", version = "~> 3.0" }
       tls        = { source = "hashicorp/tls", version = "~> 4.0" }

@@ -1,4 +1,7 @@
 terramate {
+  # Tested range: docs/TOOLCHAIN.md. 0.16.x cannot parse the bundle `define` blocks.
+  required_version = ">= 0.17.0, < 0.18.0"
+
   config {
     git {
       default_remote = "origin"
