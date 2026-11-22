@@ -10,7 +10,7 @@ define "bundle" {
     type    = string
   }
   input "tofu_version" {
-    default = "1.11.5"
+    default = "1.13.9"
     type    = string
   }
 }

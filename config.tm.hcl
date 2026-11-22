@@ -1,6 +1,6 @@
 globals {
   project_prefix = "tmhs"
-  tofu_version   = "1.11.5"
+  tofu_version   = "1.13.9"
   github_repo    = "ImIOImI/terramate-eks-hubspoke"
 
   envs = {
