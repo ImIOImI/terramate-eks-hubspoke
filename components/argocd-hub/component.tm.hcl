@@ -35,4 +35,24 @@ define "component" {
     type        = any
     description = "list of environment ids whose spoke-access roles the ArgoCD controller may assume"
   }
+  input "demo_apps" {
+    type        = bool
+    description = "deploy the hello-world charts + Argo Rollouts controller to every registered spoke"
+    default     = false
+  }
+  input "demo_apps_repo" {
+    type        = string
+    description = "git URL ArgoCD pulls charts/ from"
+    default     = ""
+  }
+  input "argo_rollouts_chart_version" {
+    type        = string
+    description = "argo-rollouts Helm chart version"
+    default     = ""
+  }
+  input "argocd_apps_chart_version" {
+    type        = string
+    description = "argocd-apps Helm chart version"
+    default     = ""
+  }
 }

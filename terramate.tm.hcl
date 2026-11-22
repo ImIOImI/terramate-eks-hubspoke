@@ -8,7 +8,7 @@ terramate {
       default_branch = "main"
     }
     telemetry { enabled = false }
-    experiments = ["outputs-sharing"]
+    experiments = ["outputs-sharing", "scripts"]
   }
 }
 
@@ -34,5 +34,17 @@ environment {
 environment {
   id          = "ci-hub"
   name        = "Local CI Hub"
-  description = "Local MiniStack-backed hub (ArgoCD) for testing the stack chain without AWS; a future ci-spoke registers against it"
+  description = "Local MiniStack-backed hub (ArgoCD) for testing the stack chain without AWS"
+}
+
+environment {
+  id          = "ci-dev"
+  name        = "Local CI Dev"
+  description = "Local MiniStack-backed spoke of ci-hub (mirrors dev)"
+}
+
+environment {
+  id          = "ci-prd"
+  name        = "Local CI Prd"
+  description = "Local MiniStack-backed spoke of ci-hub (mirrors prd)"
 }

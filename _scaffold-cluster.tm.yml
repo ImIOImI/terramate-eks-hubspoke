@@ -6,6 +6,8 @@
 #   dev    -> role: spoke  (hub_env: infra)
 #   prd    -> role: spoke  (hub_env: infra)
 #   ci-hub -> role: hub    oidc_entry: true   (local MiniStack; stands alone)
+#   ci-dev -> role: spoke  (hub_env: ci-hub)   (local MiniStack)
+#   ci-prd -> role: spoke  (hub_env: ci-hub)   (local MiniStack)
 #
 # Each environment fans out to five stacks: bootstrap -> network -> cluster ->
 # nodes -> provisioning. Spoke provisioning also runs AFTER hub provisioning (the
@@ -59,10 +61,22 @@ environments:
     inputs:
       role: spoke
       hub_env: infra
-  # Local MiniStack environment -- hub so it stands alone (no infra dependency).
-  # A future ci-spoke would take role: spoke + hub_env: ci-hub, sharing this
-  # same MiniStack endpoint.
+  # Local MiniStack environments: ci-hub stands alone (no infra dependency) and
+  # ci-dev / ci-prd are its spokes, mirroring infra -> dev/prd. demo_apps makes
+  # the hub ArgoCD deploy the hello-world charts + Argo Rollouts to every spoke.
   ci-hub:
     inputs:
       role: hub
       oidc_entry: true
+      spoke_envs: ["ci-dev", "ci-prd"]
+      demo_apps: true
+  ci-dev:
+    inputs:
+      role: spoke
+      hub_env: ci-hub
+      oidc_entry_env: ci-hub
+  ci-prd:
+    inputs:
+      role: spoke
+      hub_env: ci-hub
+      oidc_entry_env: ci-hub

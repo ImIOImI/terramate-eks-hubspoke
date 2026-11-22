@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: hello-rollout
+  labels:
+    app.kubernetes.io/name: hello-rollout
+    env: {{ .Values.env | quote }}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hello-rollout
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hello-rollout
+        env: {{ .Values.env | quote }}
+    spec:
+      containers:
+        - name: rollouts-demo
+          image: argoproj/rollouts-demo:{{ .Values.color }}
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+  strategy:
+    canary:
+      steps:
+        - setWeight: 50
+        - pause:
+            duration: {{ .Values.canary.pause }}
+        - setWeight: 100
