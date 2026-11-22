@@ -7,6 +7,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.52"
     }
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = "~> 4.7"
+    }
     helm = {
       source  = "hashicorp/helm"
       version = "~> 3.0"

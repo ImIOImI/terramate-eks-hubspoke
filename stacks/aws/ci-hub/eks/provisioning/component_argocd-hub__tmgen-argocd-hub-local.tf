@@ -1,13 +1,5 @@
 // TERRAMATE: GENERATED AUTOMATICALLY DO NOT EDIT
 
-terraform {
-  required_providers {
-    docker = {
-      source  = "kreuzwerker/docker"
-      version = "~> 4.7"
-    }
-  }
-}
 resource "kubernetes_service_v1" "argocd_server_nodeport" {
   depends_on = [
     helm_release.argocd,
