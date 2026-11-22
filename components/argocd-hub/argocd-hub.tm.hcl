@@ -182,36 +182,31 @@ generate_hcl "_tmgen-argocd-hub-local.tf" {
 }
 
 # ---------------------------------------------------------------------------
-# Demo apps (demo_apps = true; on for ci-hub): ApplicationSets that make the
-# hub deploy to EVERY registered spoke (any cluster secret carrying the `env`
-# label that argocd-spoke writes; the hub's own in-cluster entry has none):
+# Demo apps (demo_apps = true; on for ci-hub): app-of-apps.
 #
-#   argo-rollouts  — the Argo Rollouts controller (argo-helm chart)
-#   hello-world    — charts/hello-world: plain Deployment + Service
-#   hello-rollout  — charts/hello-rollout: a canary Rollout (needs the controller;
-#                    retries until its CRDs exist)
+# Tofu declares ONE root Application, pointing ArgoCD at k8s/argo in this repo.
+# From there ArgoCD manages its own ApplicationSets from git (Argo Rollouts
+# controller + the k8s/kustomize hello apps, fanned out to every registered
+# spoke). See k8s/README.md.
 #
-# ApplicationSets are declared through the argocd-apps chart rather than
-# kubernetes_manifest, which would need ArgoCD's CRDs to exist at plan time.
-# charts/ are pulled from git: var.demo_apps_revision picks the branch/sha
-# (export TF_VAR_demo_apps_revision=<branch> to test unmerged chart changes).
+# It is declared through the argocd-apps chart rather than kubernetes_manifest,
+# which would need ArgoCD's CRDs to exist at plan time.
+#
+# var.demo_apps_revision picks the git revision for the root app AND, through a
+# kustomize patch, for every ApplicationSet labelled tmhs.io/revision=root, so
+# `TF_VAR_demo_apps_revision=<branch>` tests a pushed branch end to end.
 # ---------------------------------------------------------------------------
 generate_hcl "_tmgen-argocd-demo-apps.tf" {
   condition = component.input.enabled.value && component.input.demo_apps.value
-  lets {
-    spokes   = { clusters = { selector = { matchExpressions = [{ key = "env", operator = "Exists" }] } } }
-    sync     = { automated = { prune = true, selfHeal = true }, retry = { limit = 10, backoff = { duration = "10s", factor = 2, maxDuration = "3m" } } }
-    git_repo = component.input.demo_apps_repo.value
-  }
   content {
     variable "demo_apps_revision" {
       type        = string
-      description = "git revision of ${let.git_repo} that ArgoCD deploys charts/ from"
+      description = "git revision of ${component.input.demo_apps_repo.value} that ArgoCD deploys k8s/ from"
       default     = "main"
     }
 
-    resource "helm_release" "argocd_demo_apps" {
-      name       = "argocd-demo-apps"
+    resource "helm_release" "argocd_root_app" {
+      name       = "argocd-root-app"
       namespace  = "argocd"
       repository = "https://argoproj.github.io/argo-helm"
       chart      = "argocd-apps"
@@ -219,57 +214,26 @@ generate_hcl "_tmgen-argocd-demo-apps.tf" {
       depends_on = [helm_release.argocd]
 
       values = [yamlencode({
-        applicationsets = {
-          argo-rollouts = {
-            generators = [let.spokes]
-            template = {
-              metadata = { name = "argo-rollouts-{{name}}" }
-              spec = {
-                project = "default"
-                source = {
-                  repoURL        = "https://argoproj.github.io/argo-helm"
-                  chart          = "argo-rollouts"
-                  targetRevision = component.input.argo_rollouts_chart_version.value
-                  helm           = { releaseName = "argo-rollouts" }
-                }
-                destination = { server = "{{server}}", namespace = "argo-rollouts" }
-                syncPolicy  = tm_merge(let.sync, { syncOptions = ["CreateNamespace=true", "ServerSideApply=true"] })
+        applications = {
+          k8s-argo = {
+            namespace = "argocd"
+            project   = "default"
+            source = {
+              repoURL        = component.input.demo_apps_repo.value
+              targetRevision = tm_hcl_expression("var.demo_apps_revision")
+              path           = "k8s/argo"
+              kustomize = {
+                patches = [{
+                  target = { kind = "ApplicationSet", labelSelector = "tmhs.io/revision=root" }
+                  patch = tm_hcl_expression(<<-EXPR
+                    jsonencode([{ op = "replace", path = "/spec/template/spec/source/targetRevision", value = var.demo_apps_revision }])
+                  EXPR
+                  )
+                }]
               }
             }
-          }
-          hello-world = {
-            generators = [let.spokes]
-            template = {
-              metadata = { name = "hello-world-{{name}}" }
-              spec = {
-                project = "default"
-                source = {
-                  repoURL        = let.git_repo
-                  targetRevision = tm_hcl_expression("var.demo_apps_revision")
-                  path           = "charts/hello-world"
-                  helm           = { parameters = [{ name = "env", value = "{{metadata.labels.env}}" }] }
-                }
-                destination = { server = "{{server}}", namespace = "hello-world" }
-                syncPolicy  = tm_merge(let.sync, { syncOptions = ["CreateNamespace=true"] })
-              }
-            }
-          }
-          hello-rollout = {
-            generators = [let.spokes]
-            template = {
-              metadata = { name = "hello-rollout-{{name}}" }
-              spec = {
-                project = "default"
-                source = {
-                  repoURL        = let.git_repo
-                  targetRevision = tm_hcl_expression("var.demo_apps_revision")
-                  path           = "charts/hello-rollout"
-                  helm           = { parameters = [{ name = "env", value = "{{metadata.labels.env}}" }] }
-                }
-                destination = { server = "{{server}}", namespace = "hello-rollout" }
-                syncPolicy  = tm_merge(let.sync, { syncOptions = ["CreateNamespace=true", "SkipDryRunOnMissingResource=true"] })
-              }
-            }
+            destination = { server = "https://kubernetes.default.svc", namespace = "argocd" }
+            syncPolicy  = { automated = { prune = true, selfHeal = true } }
           }
         }
       })]

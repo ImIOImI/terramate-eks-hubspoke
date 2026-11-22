@@ -2,188 +2,53 @@
 
 variable "demo_apps_revision" {
   default     = "main"
-  description = "git revision of https://github.com/ImIOImI/terramate-eks-hubspoke.git that ArgoCD deploys charts/ from"
+  description = "git revision of https://github.com/ImIOImI/terramate-eks-hubspoke.git that ArgoCD deploys k8s/ from"
   type        = string
 }
-resource "helm_release" "argocd_demo_apps" {
+resource "helm_release" "argocd_root_app" {
   chart = "argocd-apps"
   depends_on = [
     helm_release.argocd,
   ]
-  name       = "argocd-demo-apps"
+  name       = "argocd-root-app"
   namespace  = "argocd"
   repository = "https://argoproj.github.io/argo-helm"
   values = [
     yamlencode({
-      applicationsets = {
-        argo-rollouts = {
-          generators = [
-            {
-              clusters = {
-                selector = {
-                  matchExpressions = [
-                    {
-                      key      = "env"
-                      operator = "Exists"
-                    },
-                  ]
-                }
-              }
-            },
-          ]
-          template = {
-            metadata = {
-              name = "argo-rollouts-{{name}}"
-            }
-            spec = {
-              project = "default"
-              source = {
-                repoURL        = "https://argoproj.github.io/argo-helm"
-                chart          = "argo-rollouts"
-                targetRevision = "2.43.12"
-                helm = {
-                  releaseName = "argo-rollouts"
-                }
-              }
-              destination = {
-                server    = "{{server}}"
-                namespace = "argo-rollouts"
-              }
-              syncPolicy = {
-                automated = {
-                  prune    = true
-                  selfHeal = true
-                }
-                retry = {
-                  backoff = {
-                    duration    = "10s"
-                    factor      = 2
-                    maxDuration = "3m"
+      applications = {
+        k8s-argo = {
+          namespace = "argocd"
+          project   = "default"
+          source = {
+            repoURL        = "https://github.com/ImIOImI/terramate-eks-hubspoke.git"
+            targetRevision = var.demo_apps_revision
+            path           = "k8s/argo"
+            kustomize = {
+              patches = [
+                {
+                  target = {
+                    kind          = "ApplicationSet"
+                    labelSelector = "tmhs.io/revision=root"
                   }
-                  limit = 10
-                }
-                syncOptions = [
-                  "CreateNamespace=true",
-                  "ServerSideApply=true",
-                ]
-              }
+                  patch = jsonencode([
+                    {
+                      op    = "replace"
+                      path  = "/spec/template/spec/source/targetRevision"
+                      value = var.demo_apps_revision
+                    },
+                  ])
+                },
+              ]
             }
           }
-        }
-        hello-world = {
-          generators = [
-            {
-              clusters = {
-                selector = {
-                  matchExpressions = [
-                    {
-                      key      = "env"
-                      operator = "Exists"
-                    },
-                  ]
-                }
-              }
-            },
-          ]
-          template = {
-            metadata = {
-              name = "hello-world-{{name}}"
-            }
-            spec = {
-              project = "default"
-              source = {
-                repoURL        = "https://github.com/ImIOImI/terramate-eks-hubspoke.git"
-                targetRevision = var.demo_apps_revision
-                path           = "charts/hello-world"
-                helm = {
-                  parameters = [
-                    {
-                      name  = "env"
-                      value = "{{metadata.labels.env}}"
-                    },
-                  ]
-                }
-              }
-              destination = {
-                server    = "{{server}}"
-                namespace = "hello-world"
-              }
-              syncPolicy = {
-                automated = {
-                  prune    = true
-                  selfHeal = true
-                }
-                retry = {
-                  backoff = {
-                    duration    = "10s"
-                    factor      = 2
-                    maxDuration = "3m"
-                  }
-                  limit = 10
-                }
-                syncOptions = [
-                  "CreateNamespace=true",
-                ]
-              }
-            }
+          destination = {
+            server    = "https://kubernetes.default.svc"
+            namespace = "argocd"
           }
-        }
-        hello-rollout = {
-          generators = [
-            {
-              clusters = {
-                selector = {
-                  matchExpressions = [
-                    {
-                      key      = "env"
-                      operator = "Exists"
-                    },
-                  ]
-                }
-              }
-            },
-          ]
-          template = {
-            metadata = {
-              name = "hello-rollout-{{name}}"
-            }
-            spec = {
-              project = "default"
-              source = {
-                repoURL        = "https://github.com/ImIOImI/terramate-eks-hubspoke.git"
-                targetRevision = var.demo_apps_revision
-                path           = "charts/hello-rollout"
-                helm = {
-                  parameters = [
-                    {
-                      name  = "env"
-                      value = "{{metadata.labels.env}}"
-                    },
-                  ]
-                }
-              }
-              destination = {
-                server    = "{{server}}"
-                namespace = "hello-rollout"
-              }
-              syncPolicy = {
-                automated = {
-                  prune    = true
-                  selfHeal = true
-                }
-                retry = {
-                  backoff = {
-                    duration    = "10s"
-                    factor      = 2
-                    maxDuration = "3m"
-                  }
-                  limit = 10
-                }
-                syncOptions = [
-                  "CreateNamespace=true",
-                  "SkipDryRunOnMissingResource=true",
-                ]
-              }
+          syncPolicy = {
+            automated = {
+              prune    = true
+              selfHeal = true
             }
           }
         }

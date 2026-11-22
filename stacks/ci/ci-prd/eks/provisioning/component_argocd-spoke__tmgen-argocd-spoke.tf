@@ -35,6 +35,7 @@ resource "kubernetes_secret" "registration" {
     labels = {
       "argocd.argoproj.io/secret-type" = "cluster"
       env                              = "ci-prd"
+      overlay                          = "prd"
     }
     name      = "cluster-tmhs-eks-ci-prd"
     namespace = "argocd"

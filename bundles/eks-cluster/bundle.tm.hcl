@@ -67,13 +67,13 @@ define "bundle" {
   }
   input "demo_apps" {
     type        = bool
-    description = "hub only: have ArgoCD deploy the hello-world charts (charts/) and the Argo Rollouts controller to every registered spoke"
+    description = "hub only: root Application for k8s/argo (Argo Rollouts + k8s/kustomize hello apps on every registered spoke)"
     default     = false
   }
-  input "argo_rollouts_chart_version" {
+  input "k8s_overlay" {
     type        = string
-    description = "argo-rollouts Helm chart version deployed to spokes when demo_apps is on"
-    default     = "2.43.12"
+    description = "spoke only: which k8s/kustomize overlay the hub deploys here (labels the cluster secret); empty = the env id"
+    default     = ""
   }
   input "argocd_apps_chart_version" {
     type        = string
@@ -340,10 +340,9 @@ define bundle stack "provisioning" {
       argocd_chart_version = bundle.input.argocd_chart_version.value
       spoke_envs           = bundle.input.spoke_envs.value
 
-      demo_apps                   = bundle.input.demo_apps.value
-      demo_apps_repo              = "https://github.com/${bundle.input.github_repo.value}.git"
-      argo_rollouts_chart_version = bundle.input.argo_rollouts_chart_version.value
-      argocd_apps_chart_version   = bundle.input.argocd_apps_chart_version.value
+      demo_apps                 = bundle.input.demo_apps.value
+      demo_apps_repo            = "https://github.com/${bundle.input.github_repo.value}.git"
+      argocd_apps_chart_version = bundle.input.argocd_apps_chart_version.value
     }
   }
 
@@ -358,6 +357,7 @@ define bundle stack "provisioning" {
       account_map      = bundle.input.aws_account_map.value
       project_prefix   = bundle.input.project_prefix.value
       cluster_stack_id = "${bundle.environment.id}-eks-cluster"
+      k8s_overlay      = bundle.input.k8s_overlay.value != "" ? bundle.input.k8s_overlay.value : bundle.environment.id
     }
   }
 

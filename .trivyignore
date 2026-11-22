@@ -47,12 +47,12 @@ AVD-AWS-0041
 # a custom egress ruleset in a hardened deployment.
 AVD-AWS-0104
 
-# KSV-0110: workloads in the default namespace. Only the demo charts (charts/) are
-# Kubernetes manifests here, and they deliberately carry no namespace: ArgoCD
-# installs each into its own (hello-world / hello-rollout) via the Application.
+# KSV-0110: workloads in the default namespace. The only Kubernetes manifests
+# here are k8s/kustomize/default/*.yaml, which deliberately carry no namespace:
+# their kustomization sets `namespace: hello` (trivy scans the raw files).
 AVD-KSV-0110
 
-# KSV-0125: images from an untrusted registry. The demo charts pull public
+# KSV-0125: images from an untrusted registry. The demo apps pull public
 # Docker Hub demo images (traefik/whoami, argoproj/rollouts-demo); there is no
 # private registry in this showcase.
 AVD-KSV-0125

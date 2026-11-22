@@ -37,17 +37,12 @@ define "component" {
   }
   input "demo_apps" {
     type        = bool
-    description = "deploy the hello-world charts + Argo Rollouts controller to every registered spoke"
+    description = "install a root Application (app-of-apps) for k8s/argo: Argo Rollouts + the k8s/kustomize hello apps on every registered spoke"
     default     = false
   }
   input "demo_apps_repo" {
     type        = string
-    description = "git URL ArgoCD pulls charts/ from"
-    default     = ""
-  }
-  input "argo_rollouts_chart_version" {
-    type        = string
-    description = "argo-rollouts Helm chart version"
+    description = "git URL ArgoCD pulls k8s/ from"
     default     = ""
   }
   input "argocd_apps_chart_version" {

@@ -63,7 +63,9 @@ environments:
       hub_env: infra
   # Local MiniStack environments: ci-hub stands alone (no infra dependency) and
   # ci-dev / ci-prd are its spokes, mirroring infra -> dev/prd. demo_apps makes
-  # the hub ArgoCD deploy the hello-world charts + Argo Rollouts to every spoke.
+  # the hub ArgoCD manage k8s/argo (app-of-apps): Argo Rollouts + the
+  # k8s/kustomize hello apps on every spoke, each on its own overlay.
+  # stack_group: ci puts their stacks under stacks/ci/ (see its README).
   ci-hub:
     inputs:
       stack_group: ci             # stacks/ci/: see stacks/ci/README.md
@@ -74,12 +76,14 @@ environments:
   ci-dev:
     inputs:
       stack_group: ci             # stacks/ci/: see stacks/ci/README.md
+      k8s_overlay: dev              # deploys k8s/kustomize/dev
       role: spoke
       hub_env: ci-hub
       oidc_entry_env: ci-hub
   ci-prd:
     inputs:
       stack_group: ci             # stacks/ci/: see stacks/ci/README.md
+      k8s_overlay: prd              # deploys k8s/kustomize/prd
       role: spoke
       hub_env: ci-hub
       oidc_entry_env: ci-hub

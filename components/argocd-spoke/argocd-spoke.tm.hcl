@@ -147,6 +147,7 @@ generate_hcl "_tmgen-argocd-spoke.tf" {
         labels = {
           "argocd.argoproj.io/secret-type" = "cluster"
           "env"                            = component.input.env.value
+          "overlay"                        = component.input.k8s_overlay.value
         }
       }
 
@@ -166,7 +167,7 @@ generate_hcl "_tmgen-argocd-spoke.tf" {
 }
 
 # `terramate script run ci test` -- generated only into local spoke provisioning
-# stacks. Waits (on the hub) for this spoke's three demo Applications to be
+# stacks. Waits (on the hub) for this spoke's two demo Applications to be
 # Synced + Healthy, then lists what actually landed on the spoke's own k3s.
 generate_hcl "_tmgen-ci-test-script.tm.hcl" {
   condition = component.input.enabled.value && component.input.account_map.value[component.input.env.value].endpoint != ""
@@ -175,8 +176,7 @@ generate_hcl "_tmgen-ci-test-script.tm.hcl" {
     spoke_k3s = "ministack-eks-${component.input.account_map.value[component.input.env.value].region}-${component.input.cluster_name.value}"
     apps = [
       "application/argo-rollouts-${component.input.cluster_name.value}",
-      "application/hello-world-${component.input.cluster_name.value}",
-      "application/hello-rollout-${component.input.cluster_name.value}",
+      "application/hello-${component.input.cluster_name.value}",
     ]
   }
   content {
@@ -189,11 +189,9 @@ generate_hcl "_tmgen-ci-test-script.tm.hcl" {
           # cluster secret lands while it is mid-reconcile.
           ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[0]],
           ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[1]],
-          ["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=create", "--timeout=6m", let.apps[2]],
           tm_concat(["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=jsonpath={.status.sync.status}=Synced", "--timeout=10m"], let.apps),
           tm_concat(["docker", "exec", let.hub_k3s, "kubectl", "-n", "argocd", "wait", "--for=jsonpath={.status.health.status}=Healthy", "--timeout=10m"], let.apps),
-          ["docker", "exec", let.spoke_k3s, "kubectl", "get", "deploy,pods", "-n", "hello-world", "-o", "wide"],
-          ["docker", "exec", let.spoke_k3s, "kubectl", "get", "rollouts.argoproj.io,pods", "-n", "hello-rollout", "-o", "wide"],
+          ["docker", "exec", let.spoke_k3s, "kubectl", "get", "deploy,rollouts.argoproj.io,pods", "-n", "hello", "-L", "overlay", "-o", "wide"],
         ]
       }
     }
