@@ -8,7 +8,8 @@ each step has to come where it does.
 ---
 
 > For a local, no-AWS run of this same sequence, see [MINISTACK.md](MINISTACK.md) —
-> the `ci-hub` environment does all of it against MiniStack in about three minutes.
+> `make ci-apply` does all of it for a local hub (`ci-hub`) and two spokes (`ci-dev`,
+> `ci-prd`) against MiniStack in about fifteen minutes.
 
 ## TL;DR
 
@@ -24,7 +25,7 @@ make apply ENV=dev
 make apply ENV=prd
 ```
 
-`make apply` runs the tiers in order (outputs-sharing forbids a whole-chain init).
+`make apply` runs the `deploy` Terramate script (`scripts.tm.hcl`): init + apply per stack in stack-graph order (outputs-sharing forbids a whole-chain init).
 On the create path, `bootstrap` creates `tmhs-deploy`, trusts your caller via
 `data.aws_caller_identity`, and a propagation gate waits until STS honors the
 assume before the eks tiers assume it — so it all works in one invocation.
@@ -315,7 +316,7 @@ make check                                 # check-ids + generate + fail if it d
 terramate list --run-order                 # whole-repo order, bootstrap first
 terramate list --run-order --tags bootstrap --no-tags local  # the three real bootstrap applies, in order
 terramate list --run-order --tags env-dev  # one env end to end, bootstrap included
-terramate list --tags eks --no-tags local | wc -l  # 12 — the real-AWS cluster stacks CI plans (excludes bootstrap + local ci-hub)
+terramate list --tags eks --no-tags local | wc -l  # 12 — the real-AWS cluster stacks CI plans (excludes bootstrap + the local ci-* envs; ci-hub)
 terramate run --tags eks --no-tags local --dry-run -- true # no bootstrap or local stack appears
 grep -A4 'backend "s3"' stacks/aws/dev/eks/network/component_required__tmgen-terraform.tf
 ```
@@ -324,10 +325,10 @@ grep -A4 'backend "s3"' stacks/aws/dev/eks/network/component_required__tmgen-ter
 
 | Tag | Selects |
 |---|---|
-| `bootstrap` | the bootstrap stacks (one per env; 3 real + local `ci-hub`) |
+| `bootstrap` | the bootstrap stacks (one per env; 3 real + 3 local) |
 | `oidc-entry` | the accounts that own a GitHub OIDC provider + `gha-ci` role (`infra`, `ci-hub`) |
 | `eks` | the cluster stacks — **CI filters `eks` + `--no-tags local` → the 12 real-AWS stacks; excludes bootstrap** |
-| `local` | MiniStack-backed stacks (the `ci-hub` env); excluded from CI |
+| `local` | MiniStack-backed stacks (`ci-hub`, `ci-dev`, `ci-prd`); excluded from CI |
 | `env-<id>` | everything in one environment, bootstrap included |
 | `env-<id>:eks` | one environment's four cluster stacks (CI's per-env filter) |
 | `role-hub` / `role-spoke` | cluster stacks by hub/spoke role, across environments |
