@@ -5,7 +5,7 @@ define "bundle" {
     default = {
       aws = {
         source  = "hashicorp/aws"
-        version = "~> 6.0"
+        version = "~> 6.52"
       }
       helm = {
         source  = "hashicorp/helm"
